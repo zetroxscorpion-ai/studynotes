@@ -13,13 +13,24 @@ export async function getNotes() {
   return data
 }
 
-export async function addNote(title, content) {
+export async function addNote(title, content, subject = 'General') {
   const { error } = await supabase
     .from('notes')
-    .insert([{ title, content }])
+    .insert([{ title, content, subject }])
 
   if (error) {
     console.error('Error adding note:', error)
+  }
+}
+
+export async function updateNote(id, title, content, subject) {
+  const { error } = await supabase
+    .from('notes')
+    .update({ title, content, subject })
+    .eq('id', id)
+
+  if (error) {
+    console.error('Error updating note:', error)
   }
 }
 
