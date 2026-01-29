@@ -81,6 +81,11 @@ export async function deleteModule(id) {
   if (error) throw error
 }
 
+export async function deleteModule(id) {
+  const { error } = await supabase.from('modules').delete().eq('id', id)
+  if (error) throw error
+}
+
 // MISTAKE NOTES
 export async function getMistakeNotes(moduleId, subjectId) {
   let query = supabase.from('mistake_notes').select('*, redo_attempts(*)')

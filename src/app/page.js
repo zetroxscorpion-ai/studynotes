@@ -529,8 +529,8 @@ export default function StudyNotesApp() {
       setMistakeNotes(notesData || [])
       setTips(tipsData || [])
       
-      // Set default selected module
-      const mistakeModules = (modulesData || []).filter(m => m.module_type === 'mistake')
+      // Set default selected module (exclude General for mistakes)
+      const mistakeModules = (modulesData || []).filter(m => m.module_type === 'mistake' && m.name !== 'General')
       const tipModules = (modulesData || []).filter(m => m.module_type === 'tip')
       
       if (selectedTab === 'mistakes' && mistakeModules.length > 0) {
@@ -565,40 +565,6 @@ export default function StudyNotesApp() {
     setTips([])
   }
 
-  // Subject operations
-  const addSubject = async () => {
-    try {
-      const newSubject = await db.createSubject({
-        name: 'New Subject',
-        icon: '📚',
-        color: 'blue',
-        sort_order: subjects.length
-      })
-      setSubjects([...subjects, newSubject])
-    } catch (err) {
-      console.error('Failed to create subject:', err)
-    }
-  }
-
-  const updateSubject = async (id, updates) => {
-    try {
-      const updated = await db.updateSubject(id, updates)
-      setSubjects(subjects.map(s => s.id === id ? updated : s))
-    } catch (err) {
-      console.error('Failed to update subject:', err)
-    }
-  }
-
-  const deleteSubject = async (id) => {
-    if (!confirm('Delete this subject and all its content?')) return
-    try {
-      await db.deleteSubject(id)
-      setSubjects(subjects.filter(s => s.id !== id))
-    } catch (err) {
-      console.error('Failed to delete subject:', err)
-    }
-  }
-
   // Module operations
   const addModule = async () => {
     if (!newModuleName.trim() || !selectedSubject) return
@@ -615,6 +581,32 @@ export default function StudyNotesApp() {
       setShowAddModule(false)
     } catch (err) {
       console.error('Failed to create module:', err)
+    }
+  }
+
+  const deleteModule = async (id) => {
+    const moduleToDelete = modules.find(m => m.id === id)
+    if (!moduleToDelete) return
+    
+    const itemCount = selectedTab === 'mistakes' 
+      ? mistakeNotes.filter(n => n.module_id === id).length
+      : tips.filter(t => t.module_id === id).length
+    
+    const confirmMessage = itemCount > 0
+      ? `Delete "${moduleToDelete.name}" and its ${itemCount} ${selectedTab === 'mistakes' ? 'mistake note' : 'tip'}${itemCount > 1 ? 's' : ''}? This cannot be undone.`
+      : `Delete "${moduleToDelete.name}"? This cannot be undone.`
+    
+    if (!confirm(confirmMessage)) return
+    
+    try {
+      await db.deleteModule(id)
+      setModules(modules.filter(m => m.id !== id))
+      if (selectedModule?.id === id) {
+        const remaining = modules.filter(m => m.id !== id && m.module_type === selectedModule.module_type && m.name !== 'General')
+        setSelectedModule(remaining[0] || null)
+      }
+    } catch (err) {
+      console.error('Failed to delete module:', err)
     }
   }
 
@@ -644,6 +636,8 @@ export default function StudyNotesApp() {
   }
 
   const deleteMistake = async (id) => {
+    const mistake = mistakeNotes.find(n => n.id === id)
+    if (!confirm(`Delete "${mistake?.title || 'Untitled Question'}"? This cannot be undone.`)) return
     try {
       await db.deleteMistakeNote(id)
       setMistakeNotes(mistakeNotes.filter(n => n.id !== id))
@@ -697,6 +691,7 @@ export default function StudyNotesApp() {
   }
 
   const deleteTip = async (id) => {
+    if (!confirm('Delete this tip? This cannot be undone.')) return
     try {
       await db.deleteTip(id)
       setTips(tips.filter(t => t.id !== id))
@@ -716,6 +711,7 @@ export default function StudyNotesApp() {
   }
 
   const removeMistakeType = async (id) => {
+    if (!confirm('Delete this mistake type?')) return
     try {
       await db.deleteMistakeType(id)
       setMistakeTypes(mistakeTypes.filter(t => t.id !== id))
@@ -724,10 +720,12 @@ export default function StudyNotesApp() {
     }
   }
 
-  // Filtered data
-  const currentModules = modules.filter(m => 
-    m.module_type === (selectedTab === 'mistakes' ? 'mistake' : 'tip')
-  )
+  // Filtered data - Hide General for mistakes, show for tips
+  const currentModules = modules.filter(m => {
+    const isCorrectType = m.module_type === (selectedTab === 'mistakes' ? 'mistake' : 'tip')
+    if (selectedTab === 'mistakes' && m.name === 'General') return false
+    return isCorrectType
+  })
 
   const currentMistakes = useMemo(() => {
     let filtered = mistakeNotes.filter(n => n.module_id === selectedModule?.id)
@@ -838,18 +836,11 @@ export default function StudyNotesApp() {
 
       {/* Main Content */}
       <main className="max-w-6xl mx-auto px-4 py-6">
-        {/* Subjects List */}
+        {/* Subjects List - REMOVED ADD SUBJECT BUTTON */}
         {activeView === 'subjects' && !selectedSubject && (
           <div>
-            <div className="flex items-center justify-between mb-6">
+            <div className="mb-6">
               <h1 className="text-2xl font-bold">Your Subjects</h1>
-              <button
-                onClick={addSubject}
-                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-500 text-white hover:bg-blue-600 transition-colors"
-              >
-                <Plus size={18} />
-                Add Subject
-              </button>
             </div>
 
             {subjects.length === 0 ? (
@@ -874,14 +865,6 @@ export default function StudyNotesApp() {
                     >
                       <div className="flex items-start justify-between">
                         <div className="text-4xl mb-3">{subject.icon}</div>
-                        <button
-                          onClick={(e) => { e.stopPropagation(); deleteSubject(subject.id); }}
-                          className={`p-1 rounded opacity-0 hover:opacity-100 transition-opacity ${
-                            darkMode ? 'hover:bg-red-500/20 text-gray-400 hover:text-red-400' : 'hover:bg-red-50 text-gray-400 hover:text-red-500'
-                          }`}
-                        >
-                          <Trash2 size={16} />
-                        </button>
                       </div>
                       <h3 className="text-xl font-semibold mb-2">{subject.name}</h3>
                       <div className={`flex items-center gap-4 text-sm ${secondaryText}`}>
@@ -927,7 +910,7 @@ export default function StudyNotesApp() {
                 <button
                   onClick={() => {
                     setSelectedTab('mistakes')
-                    const mistakeModules = modules.filter(m => m.module_type === 'mistake')
+                    const mistakeModules = modules.filter(m => m.module_type === 'mistake' && m.name !== 'General')
                     setSelectedModule(mistakeModules[0] || null)
                   }}
                   className={`px-4 py-2 rounded-md transition-colors ${
@@ -967,20 +950,31 @@ export default function StudyNotesApp() {
               </button>
             </div>
 
-            {/* Module Selector */}
+            {/* Module Selector with Delete Button */}
             <div className="flex items-center gap-2 mb-6 flex-wrap">
               {currentModules.map((module) => (
-                <button
-                  key={module.id}
-                  onClick={() => setSelectedModule(module)}
-                  className={`px-4 py-2 rounded-lg border transition-colors ${
-                    selectedModule?.id === module.id
-                      ? 'border-blue-500 bg-blue-500/20 text-blue-400'
-                      : `${borderColor} ${secondaryText} hover:border-gray-500`
-                  }`}
-                >
-                  {module.name}
-                </button>
+                <div key={module.id} className="relative group">
+                  <button
+                    onClick={() => setSelectedModule(module)}
+                    className={`px-4 py-2 pr-8 rounded-lg border transition-colors ${
+                      selectedModule?.id === module.id
+                        ? 'border-blue-500 bg-blue-500/20 text-blue-400'
+                        : `${borderColor} ${secondaryText} hover:border-gray-500`
+                    }`}
+                  >
+                    {module.name}
+                  </button>
+                  {module.name !== 'General' && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); deleteModule(module.id); }}
+                      className={`absolute right-1 top-1/2 -translate-y-1/2 p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity ${
+                        darkMode ? 'hover:bg-red-500/20 text-gray-400 hover:text-red-400' : 'hover:bg-red-50 text-gray-400 hover:text-red-500'
+                      }`}
+                    >
+                      <X size={14} />
+                    </button>
+                  )}
+                </div>
               ))}
               
               {showAddModule ? (
@@ -1041,7 +1035,7 @@ export default function StudyNotesApp() {
                       <MistakeCard
                         key={mistake.id}
                         mistake={mistake}
-                        modules={modules.filter(m => m.module_type === 'mistake')}
+                        modules={modules.filter(m => m.module_type === 'mistake' && m.name !== 'General')}
                         mistakeTypes={mistakeTypes}
                         darkMode={darkMode}
                         onUpdate={(updates) => updateMistake(mistake.id, updates)}
@@ -1255,7 +1249,12 @@ function MistakeCard({ mistake, modules, mistakeTypes, darkMode, onUpdate, onDel
         }`}
         onClick={() => !mistake.isNew && setIsExpanded(!isExpanded)}
       >
-        <GripVertical size={16} className={`${darkMode ? 'text-gray-500' : 'text-gray-400'}`} />
+        <div 
+          className={`touch-none cursor-grab active:cursor-grabbing p-1 -m-1 ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}
+          onTouchStart={(e) => e.stopPropagation()}
+        >
+          <GripVertical size={16} />
+        </div>
         
         <button onClick={(e) => { e.stopPropagation(); if (!mistake.isNew) setIsExpanded(!isExpanded); }}>
           {isExpanded ? (
@@ -1693,7 +1692,12 @@ function TipCard({ tip, darkMode, onUpdate, onDelete }) {
         darkMode ? 'bg-gray-800/50' : 'bg-white'
       } ${tip.is_important ? (darkMode ? 'ring-2 ring-amber-500/50' : 'ring-2 ring-amber-400/50') : ''}`}
     >
-      <GripVertical size={16} className={`mt-1 ${darkMode ? 'text-gray-500' : 'text-gray-400'} flex-shrink-0`} />
+      <div 
+        className={`touch-none cursor-grab active:cursor-grabbing p-1 -m-1 mt-1 ${darkMode ? 'text-gray-500' : 'text-gray-400'} flex-shrink-0`}
+        onTouchStart={(e) => e.stopPropagation()}
+      >
+        <GripVertical size={16} />
+      </div>
       <Lightbulb size={16} className="mt-1 text-amber-500 flex-shrink-0" />
       
       {isEditing ? (
