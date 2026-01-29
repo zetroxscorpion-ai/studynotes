@@ -1,12 +1,6 @@
 import { supabase } from './supabase'
 
-// Get current user ID helper
-const getUserId = async () => {
-  const { data: { user } } = await supabase.auth.getUser()
-  return user?.id
-}
-
-// SUBJECTS
+// Subjects
 export async function getSubjects() {
   const { data, error } = await supabase
     .from('subjects')
@@ -17,10 +11,10 @@ export async function getSubjects() {
 }
 
 export async function createSubject(subject) {
-  const user_id = await getUserId()
+  const { data: { user } } = await supabase.auth.getUser()
   const { data, error } = await supabase
     .from('subjects')
-    .insert([{ ...subject, user_id }])
+    .insert({ ...subject, user_id: user.id })
     .select()
     .single()
   if (error) throw error
@@ -43,22 +37,20 @@ export async function deleteSubject(id) {
   if (error) throw error
 }
 
-// MODULES
+// Modules
 export async function getModules(subjectId) {
-  const { data, error } = await supabase
-    .from('modules')
-    .select('*')
-    .eq('subject_id', subjectId)
-    .order('sort_order')
+  let query = supabase.from('modules').select('*').order('sort_order')
+  if (subjectId) query = query.eq('subject_id', subjectId)
+  const { data, error } = await query
   if (error) throw error
   return data
 }
 
 export async function createModule(module) {
-  const user_id = await getUserId()
+  const { data: { user } } = await supabase.auth.getUser()
   const { data, error } = await supabase
     .from('modules')
-    .insert([{ ...module, user_id }])
+    .insert({ ...module, user_id: user.id })
     .select()
     .single()
   if (error) throw error
@@ -81,28 +73,29 @@ export async function deleteModule(id) {
   if (error) throw error
 }
 
-export async function deleteModule(id) {
-  const { error } = await supabase.from('modules').delete().eq('id', id)
-  if (error) throw error
-}
-
-// MISTAKE NOTES
+// Mistake Notes
 export async function getMistakeNotes(moduleId, subjectId) {
-  let query = supabase.from('mistake_notes').select('*, redo_attempts(*)')
+  let query = supabase
+    .from('mistake_notes')
+    .select(`
+      *,
+      redo_attempts (*)
+    `)
+    .order('sort_order')
   
   if (moduleId) query = query.eq('module_id', moduleId)
   if (subjectId) query = query.eq('subject_id', subjectId)
   
-  const { data, error } = await query.order('sort_order')
+  const { data, error } = await query
   if (error) throw error
   return data
 }
 
 export async function createMistakeNote(note) {
-  const user_id = await getUserId()
+  const { data: { user } } = await supabase.auth.getUser()
   const { data, error } = await supabase
     .from('mistake_notes')
-    .insert([{ ...note, user_id }])
+    .insert({ ...note, user_id: user.id })
     .select()
     .single()
   if (error) throw error
@@ -125,45 +118,33 @@ export async function deleteMistakeNote(id) {
   if (error) throw error
 }
 
-export async function getScheduledMistakes() {
-  const { data, error } = await supabase
-    .from('mistake_notes')
-    .select('*, subjects(*), modules(*)')
-    .not('scheduled_redo', 'is', null)
-    .order('scheduled_redo')
-  if (error) throw error
-  return data
-}
-
-// REDO ATTEMPTS
+// Redo Attempts
 export async function createRedoAttempt(attempt) {
-  const user_id = await getUserId()
+  const { data: { user } } = await supabase.auth.getUser()
   const { data, error } = await supabase
     .from('redo_attempts')
-    .insert([{ ...attempt, user_id }])
+    .insert({ ...attempt, user_id: user.id })
     .select()
     .single()
   if (error) throw error
   return data
 }
 
-// TIPS
+// Tips
 export async function getTips(moduleId, subjectId) {
-  let query = supabase.from('tips').select('*')
-  
+  let query = supabase.from('tips').select('*').order('sort_order')
   if (moduleId) query = query.eq('module_id', moduleId)
   if (subjectId) query = query.eq('subject_id', subjectId)
-  
-  const { data, error } = await query.order('sort_order')
+  const { data, error } = await query
   if (error) throw error
   return data
 }
 
 export async function createTip(tip) {
-  const user_id = await getUserId()
+  const { data: { user } } = await supabase.auth.getUser()
   const { data, error } = await supabase
     .from('tips')
-    .insert([{ ...tip, user_id }])
+    .insert({ ...tip, user_id: user.id })
     .select()
     .single()
   if (error) throw error
@@ -186,21 +167,21 @@ export async function deleteTip(id) {
   if (error) throw error
 }
 
-// MISTAKE TYPES
+// Mistake Types
 export async function getMistakeTypes() {
   const { data, error } = await supabase
     .from('mistake_types')
     .select('*')
-    .order('created_at')
+    .order('name')
   if (error) throw error
   return data
 }
 
 export async function createMistakeType(name) {
-  const user_id = await getUserId()
+  const { data: { user } } = await supabase.auth.getUser()
   const { data, error } = await supabase
     .from('mistake_types')
-    .insert([{ name, user_id }])
+    .insert({ name, user_id: user.id })
     .select()
     .single()
   if (error) throw error
@@ -212,13 +193,15 @@ export async function deleteMistakeType(id) {
   if (error) throw error
 }
 
-// USER SETTINGS
+// User Settings
 export async function getUserSettings() {
-  const user_id = await getUserId()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return null
+  
   const { data, error } = await supabase
     .from('user_settings')
     .select('*')
-    .eq('user_id', user_id)
+    .eq('user_id', user.id)
     .single()
   
   if (error && error.code !== 'PGRST116') throw error
@@ -226,12 +209,27 @@ export async function getUserSettings() {
 }
 
 export async function updateUserSettings(settings) {
-  const user_id = await getUserId()
+  const { data: { user } } = await supabase.auth.getUser()
   const { data, error } = await supabase
     .from('user_settings')
-    .upsert([{ ...settings, user_id }], { onConflict: 'user_id' })
+    .upsert({ user_id: user.id, ...settings })
     .select()
     .single()
+  if (error) throw error
+  return data
+}
+
+// Scheduled Mistakes
+export async function getScheduledMistakes() {
+  const { data, error } = await supabase
+    .from('mistake_notes')
+    .select(`
+      *,
+      subjects (name, icon),
+      modules (name)
+    `)
+    .not('scheduled_redo', 'is', null)
+    .order('scheduled_redo')
   if (error) throw error
   return data
 }
