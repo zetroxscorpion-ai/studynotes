@@ -51,7 +51,7 @@ import {
   List
 } from 'lucide-react'
 import jsPDF from 'jspdf'
-import { db } from './lib/database'
+import * as db from '@/lib/database'
 
 // Authentication Component
 function AuthScreen({ onLogin, onSignup, darkMode }) {
