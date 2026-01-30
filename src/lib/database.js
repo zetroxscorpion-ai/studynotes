@@ -79,16 +79,16 @@ export async function deleteSubject(id) {
   if (error) throw error
 }
 
-// Modules
+// Modules - TEMPORARY DEBUG VERSION
 export async function getModules() {
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return []
-  
   const { data, error } = await supabase
     .from('modules')
     .select('*, subjects(name, color)')
-    .eq('user_id', user.id)
     .order('name')
+  
+  console.log('Modules data:', data)
+  console.log('Modules error:', error)
+  
   if (error) throw error
   return data || []
 }
