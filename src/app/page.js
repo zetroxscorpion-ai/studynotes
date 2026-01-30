@@ -1,12 +1,12 @@
 'use client'
 
 import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion, AnimatePresence, Reorder } from 'framer-motion'
 import {
   ChevronDown, ChevronRight, Plus, X, Star, Calendar, Shuffle, Settings,
   Sun, Moon, GripVertical, Trash2, Edit3, Check, Play, BookOpen,
   Lightbulb, AlertCircle, ArrowLeft, ArrowRight, Upload, CheckCircle,
-  XCircle, MinusCircle, LogOut, User, Loader2
+  XCircle, MinusCircle, LogOut, User, Loader2, Download, RotateCcw
 } from 'lucide-react'
 import { supabase, uploadImage } from '@/lib/supabase'
 import * as db from '@/lib/database'
@@ -188,6 +188,126 @@ const redoStatuses = [
   { id: 'fail', label: 'Fail', color: 'red' },
 ]
 
+// PDF Export Function
+const exportToPDF = async (mistakes, subject, module, darkMode) => {
+  // Dynamic import to avoid SSR issues
+  const { jsPDF } = await import('jspdf')
+  
+  const doc = new jsPDF()
+  let yPosition = 20
+  const pageHeight = doc.internal.pageSize.height
+  const margin = 20
+  const lineHeight = 7
+  
+  // Title
+  doc.setFontSize(20)
+  doc.setFont('helvetica', 'bold')
+  doc.text(`${subject?.name || 'Study Notes'} - ${module?.name || 'Mistakes'}`, margin, yPosition)
+  yPosition += 15
+  
+  doc.setFontSize(10)
+  doc.setFont('helvetica', 'normal')
+  doc.text(`Exported on ${new Date().toLocaleDateString()}`, margin, yPosition)
+  yPosition += 15
+  
+  for (const mistake of mistakes) {
+    // Check if we need a new page
+    if (yPosition > pageHeight - 60) {
+      doc.addPage()
+      yPosition = 20
+    }
+    
+    // Title
+    doc.setFontSize(14)
+    doc.setFont('helvetica', 'bold')
+    const title = mistake.title || 'Untitled Question'
+    doc.text(title + (mistake.is_important ? ' ⭐' : ''), margin, yPosition)
+    yPosition += lineHeight + 3
+    
+    doc.setFontSize(10)
+    doc.setFont('helvetica', 'normal')
+    
+    // Question
+    if (mistake.question) {
+      doc.setFont('helvetica', 'bold')
+      doc.text('Question:', margin, yPosition)
+      yPosition += lineHeight
+      doc.setFont('helvetica', 'normal')
+      const questionLines = doc.splitTextToSize(mistake.question, 170)
+      doc.text(questionLines, margin, yPosition)
+      yPosition += questionLines.length * lineHeight + 3
+    }
+    
+    // Incorrect Answer
+    if (mistake.incorrect_answer) {
+      if (yPosition > pageHeight - 40) { doc.addPage(); yPosition = 20 }
+      doc.setFont('helvetica', 'bold')
+      doc.text('My Incorrect Answer:', margin, yPosition)
+      yPosition += lineHeight
+      doc.setFont('helvetica', 'normal')
+      const incorrectLines = doc.splitTextToSize(mistake.incorrect_answer, 170)
+      doc.text(incorrectLines, margin, yPosition)
+      yPosition += incorrectLines.length * lineHeight + 3
+    }
+    
+    // Model Answer
+    if (mistake.model_answer) {
+      if (yPosition > pageHeight - 40) { doc.addPage(); yPosition = 20 }
+      doc.setFont('helvetica', 'bold')
+      doc.text('Model Answer:', margin, yPosition)
+      yPosition += lineHeight
+      doc.setFont('helvetica', 'normal')
+      const modelLines = doc.splitTextToSize(mistake.model_answer, 170)
+      doc.text(modelLines, margin, yPosition)
+      yPosition += modelLines.length * lineHeight + 3
+    }
+    
+    // Explanation
+    if (mistake.explanation) {
+      if (yPosition > pageHeight - 40) { doc.addPage(); yPosition = 20 }
+      doc.setFont('helvetica', 'bold')
+      doc.text('Explanation:', margin, yPosition)
+      yPosition += lineHeight
+      doc.setFont('helvetica', 'normal')
+      const explainLines = doc.splitTextToSize(mistake.explanation, 170)
+      doc.text(explainLines, margin, yPosition)
+      yPosition += explainLines.length * lineHeight + 3
+    }
+    
+    // Redo Attempts
+    if (mistake.redo_attempts?.length > 0) {
+      if (yPosition > pageHeight - 40) { doc.addPage(); yPosition = 20 }
+      doc.setFont('helvetica', 'bold')
+      doc.text(`Redo Attempts (${mistake.redo_attempts.length}):`, margin, yPosition)
+      yPosition += lineHeight
+      doc.setFont('helvetica', 'normal')
+      
+      mistake.redo_attempts.forEach((attempt, index) => {
+        if (yPosition > pageHeight - 30) { doc.addPage(); yPosition = 20 }
+        const statusEmoji = attempt.status === 'success' ? '✓' : attempt.status === 'partial' ? '~' : '✗'
+        doc.text(`  ${index + 1}. [${statusEmoji}] ${formatDate(attempt.attempt_date)}`, margin, yPosition)
+        yPosition += lineHeight
+        if (attempt.notes) {
+          const attemptLines = doc.splitTextToSize(`     ${attempt.notes}`, 160)
+          doc.text(attemptLines, margin, yPosition)
+          yPosition += attemptLines.length * lineHeight
+        }
+      })
+      yPosition += 3
+    }
+    
+    // Separator
+    yPosition += 5
+    doc.setDrawColor(200, 200, 200)
+    doc.line(margin, yPosition, 190, yPosition)
+    yPosition += 10
+  }
+  
+  // Save
+  const fileName = `${subject?.name || 'StudyNotes'}_${module?.name || 'Mistakes'}_${new Date().toISOString().split('T')[0]}.pdf`
+  doc.save(fileName)
+}
+
 // Image Upload Component
 function ImageUpload({ value, onChange, darkMode }) {
   const [uploading, setUploading] = useState(false)
@@ -285,7 +405,7 @@ function RichInput({ label, value, image, onTextChange, onImageChange, darkMode,
   )
 }
 
-// Flashcard Component
+// Flashcard Component - FIXED to always show images
 function FlashcardMode({ items, onClose, darkMode }) {
   const [currentIndex, setCurrentIndex] = useState(0)
   const [showAnswer, setShowAnswer] = useState(false)
@@ -331,7 +451,7 @@ function FlashcardMode({ items, onClose, darkMode }) {
         </div>
 
         <div
-          className={`min-h-96 rounded-2xl p-8 cursor-pointer ${
+          className={`min-h-96 rounded-2xl p-8 cursor-pointer overflow-y-auto max-h-[70vh] ${
             darkMode ? 'bg-gray-800' : 'bg-white'
           }`}
           onClick={() => setShowAnswer(!showAnswer)}
@@ -357,11 +477,13 @@ function FlashcardMode({ items, onClose, darkMode }) {
                     </h3>
                     {current.is_important && <Star size={16} className="text-amber-500 fill-amber-500" />}
                   </div>
-                  <p className={`text-xl ${darkMode ? 'text-gray-100' : 'text-gray-900'} whitespace-pre-wrap`}>
-                    {current.question}
-                  </p>
+                  {current.question && (
+                    <p className={`text-xl ${darkMode ? 'text-gray-100' : 'text-gray-900'} whitespace-pre-wrap`}>
+                      {current.question}
+                    </p>
+                  )}
                   {current.question_image && (
-                    <img src={current.question_image} alt="" className="max-h-48 rounded-lg mx-auto" />
+                    <img src={current.question_image} alt="" className="max-h-64 rounded-lg mx-auto" />
                   )}
                 </>
               )}
@@ -381,18 +503,30 @@ function FlashcardMode({ items, onClose, darkMode }) {
               ) : (
                 <>
                   <h4 className={`text-sm font-medium ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Model Answer</h4>
-                  <p className={`text-lg ${darkMode ? 'text-gray-100' : 'text-gray-900'} whitespace-pre-wrap`}>
-                    {current.model_answer || 'No model answer provided'}
-                  </p>
-                  {current.model_answer_image && (
-                    <img src={current.model_answer_image} alt="" className="max-h-48 rounded-lg mx-auto" />
+                  {current.model_answer && (
+                    <p className={`text-lg ${darkMode ? 'text-gray-100' : 'text-gray-900'} whitespace-pre-wrap`}>
+                      {current.model_answer}
+                    </p>
                   )}
-                  {current.explanation && (
+                  {current.model_answer_image && (
+                    <img src={current.model_answer_image} alt="" className="max-h-64 rounded-lg mx-auto" />
+                  )}
+                  {!current.model_answer && !current.model_answer_image && (
+                    <p className={`text-lg ${darkMode ? 'text-gray-400' : 'text-gray-500'} italic`}>
+                      No model answer provided
+                    </p>
+                  )}
+                  {(current.explanation || current.explanation_image) && (
                     <>
                       <h4 className={`text-sm font-medium mt-4 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Explanation</h4>
-                      <p className={`${darkMode ? 'text-gray-300' : 'text-gray-700'} whitespace-pre-wrap`}>
-                        {current.explanation}
-                      </p>
+                      {current.explanation && (
+                        <p className={`${darkMode ? 'text-gray-300' : 'text-gray-700'} whitespace-pre-wrap`}>
+                          {current.explanation}
+                        </p>
+                      )}
+                      {current.explanation_image && (
+                        <img src={current.explanation_image} alt="" className="max-h-64 rounded-lg mx-auto" />
+                      )}
                     </>
                   )}
                 </>
@@ -437,6 +571,84 @@ function FlashcardMode({ items, onClose, darkMode }) {
   )
 }
 
+// Quick Redo Form Component
+function QuickRedoForm({ onSubmit, onCancel, darkMode }) {
+  const [status, setStatus] = useState('success')
+  const [notes, setNotes] = useState('')
+  const [image, setImage] = useState(null)
+
+  const handleSubmit = () => {
+    onSubmit({
+      status,
+      notes,
+      image,
+      attempt_date: new Date().toISOString()
+    })
+  }
+
+  return (
+    <div className={`p-4 rounded-lg ${darkMode ? 'bg-gray-700/50' : 'bg-gray-50'}`}>
+      <h4 className={`text-sm font-medium mb-3 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+        Add Redo Attempt
+      </h4>
+      <div className="flex gap-2 mb-3">
+        {redoStatuses.map(({ id, label }) => {
+          const StatusIcon = getStatusIcon(id)
+          return (
+            <button
+              key={id}
+              type="button"
+              onClick={() => setStatus(id)}
+              className={`flex items-center gap-1 px-3 py-1.5 text-sm rounded-lg border transition-colors ${
+                status === id
+                  ? id === 'success' ? 'border-green-500 bg-green-500/20 text-green-400' :
+                    id === 'partial' ? 'border-yellow-500 bg-yellow-500/20 text-yellow-400' :
+                    'border-red-500 bg-red-500/20 text-red-400'
+                  : darkMode ? 'border-gray-600 text-gray-400' : 'border-gray-300 text-gray-600'
+              }`}
+            >
+              <StatusIcon size={14} />
+              {label}
+            </button>
+          )
+        })}
+      </div>
+      <textarea
+        value={notes}
+        onChange={(e) => setNotes(e.target.value)}
+        placeholder="Notes on this attempt (optional)..."
+        className={`w-full px-3 py-2 rounded-lg border resize-none ${
+          darkMode
+            ? 'bg-gray-800 border-gray-600 text-gray-100'
+            : 'bg-white border-gray-300 text-gray-900'
+        }`}
+        rows={2}
+      />
+      <div className="mt-2">
+        <ImageUpload value={image} onChange={setImage} darkMode={darkMode} />
+      </div>
+      <div className="flex justify-end gap-2 mt-3">
+        <button
+          type="button"
+          onClick={onCancel}
+          className={`px-3 py-1.5 text-sm rounded-lg ${
+            darkMode ? 'text-gray-400 hover:text-gray-300' : 'text-gray-500 hover:text-gray-600'
+          }`}
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          onClick={handleSubmit}
+          className="px-3 py-1.5 text-sm rounded-lg bg-blue-500 text-white hover:bg-blue-600"
+        >
+          Save
+        </button>
+      </div>
+    </div>
+  )
+}
+
 // Main App Component
 export default function StudyNotesApp() {
   // Auth state
@@ -452,7 +664,7 @@ export default function StudyNotesApp() {
   const [settings, setSettings] = useState({ dark_mode: true })
   const [loading, setLoading] = useState(false)
 
-  // UI state
+  // UI state - DEFAULT TO DARK MODE
   const [darkMode, setDarkMode] = useState(true)
   const [activeView, setActiveView] = useState('subjects')
   const [selectedSubject, setSelectedSubject] = useState(null)
@@ -463,6 +675,10 @@ export default function StudyNotesApp() {
   const [showAddModule, setShowAddModule] = useState(false)
   const [newModuleName, setNewModuleName] = useState('')
   const [newTipText, setNewTipText] = useState('')
+  
+  // Track unsaved notes for auto-save
+  const [unsavedNotes, setUnsavedNotes] = useState({})
+  const [isReordering, setIsReordering] = useState(false)
 
   // Check auth on mount
   useEffect(() => {
@@ -488,6 +704,42 @@ export default function StudyNotesApp() {
     }
   }, [user])
 
+  // Auto-save unsaved notes when navigating away
+  useEffect(() => {
+    const saveUnsavedNotes = async () => {
+      const unsavedIds = Object.keys(unsavedNotes)
+      for (const id of unsavedIds) {
+        const noteData = unsavedNotes[id]
+        if (noteData && !noteData.isNew) {
+          try {
+            await db.updateMistakeNote(id, noteData)
+          } catch (err) {
+            console.error('Auto-save failed for note:', id, err)
+          }
+        }
+      }
+      setUnsavedNotes({})
+    }
+
+    // Save when changing views or subjects
+    if (Object.keys(unsavedNotes).length > 0) {
+      saveUnsavedNotes()
+    }
+  }, [activeView, selectedSubject, selectedModule])
+
+  // Handle beforeunload for browser close/refresh
+  useEffect(() => {
+    const handleBeforeUnload = (e) => {
+      if (Object.keys(unsavedNotes).length > 0) {
+        e.preventDefault()
+        e.returnValue = ''
+      }
+    }
+    
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload)
+  }, [unsavedNotes])
+
   const loadInitialData = async () => {
     setLoading(true)
     try {
@@ -501,7 +753,7 @@ export default function StudyNotesApp() {
       setMistakeTypes(mistakeTypesData || [])
       if (settingsData) {
         setSettings(settingsData)
-        setDarkMode(settingsData.dark_mode)
+        setDarkMode(settingsData.dark_mode ?? true) // Default to true if not set
       }
     } catch (err) {
       console.error('Failed to load data:', err)
@@ -556,13 +808,43 @@ export default function StudyNotesApp() {
     }
   }
 
-  // Handle sign out
+  // Handle sign out - auto-save before signing out
   const handleSignOut = async () => {
+    // Save any unsaved notes before signing out
+    const unsavedIds = Object.keys(unsavedNotes)
+    for (const id of unsavedIds) {
+      const noteData = unsavedNotes[id]
+      if (noteData && !noteData.isNew) {
+        try {
+          await db.updateMistakeNote(id, noteData)
+        } catch (err) {
+          console.error('Auto-save failed:', err)
+        }
+      }
+    }
+    
     await supabase.auth.signOut()
     setSubjects([])
     setModules([])
     setMistakeNotes([])
     setTips([])
+    setUnsavedNotes({})
+  }
+
+  // Track unsaved changes
+  const trackUnsavedChanges = (id, data) => {
+    setUnsavedNotes(prev => ({
+      ...prev,
+      [id]: data
+    }))
+  }
+
+  const clearUnsavedChanges = (id) => {
+    setUnsavedNotes(prev => {
+      const newState = { ...prev }
+      delete newState[id]
+      return newState
+    })
   }
 
   // Module operations
@@ -630,6 +912,7 @@ export default function StudyNotesApp() {
     try {
       const updated = await db.updateMistakeNote(id, updates)
       setMistakeNotes(mistakeNotes.map(n => n.id === id ? { ...n, ...updated, isNew: false } : n))
+      clearUnsavedChanges(id)
     } catch (err) {
       console.error('Failed to update mistake:', err)
     }
@@ -641,8 +924,43 @@ export default function StudyNotesApp() {
     try {
       await db.deleteMistakeNote(id)
       setMistakeNotes(mistakeNotes.filter(n => n.id !== id))
+      clearUnsavedChanges(id)
     } catch (err) {
       console.error('Failed to delete mistake:', err)
+    }
+  }
+
+  // Reorder mistakes
+  const handleReorderMistakes = async (newOrder) => {
+    setMistakeNotes(prev => {
+      const otherNotes = prev.filter(n => n.module_id !== selectedModule?.id)
+      return [...otherNotes, ...newOrder]
+    })
+    
+    // Update sort_order in database
+    for (let i = 0; i < newOrder.length; i++) {
+      try {
+        await db.updateMistakeNote(newOrder[i].id, { sort_order: i })
+      } catch (err) {
+        console.error('Failed to update sort order:', err)
+      }
+    }
+  }
+
+  // Reorder tips
+  const handleReorderTips = async (newOrder) => {
+    setTips(prev => {
+      const otherTips = prev.filter(t => t.module_id !== selectedModule?.id)
+      return [...otherTips, ...newOrder]
+    })
+    
+    // Update sort_order in database
+    for (let i = 0; i < newOrder.length; i++) {
+      try {
+        await db.updateTip(newOrder[i].id, { sort_order: i })
+      } catch (err) {
+        console.error('Failed to update sort order:', err)
+      }
     }
   }
 
@@ -718,6 +1036,15 @@ export default function StudyNotesApp() {
     } catch (err) {
       console.error('Failed to delete mistake type:', err)
     }
+  }
+
+  // PDF Export handler
+  const handleExportPDF = () => {
+    if (currentMistakes.length === 0) {
+      alert('No mistakes to export in this module')
+      return
+    }
+    exportToPDF(currentMistakes, selectedSubject, selectedModule, darkMode)
   }
 
   // Filtered data - Hide General for mistakes, show for tips
@@ -836,7 +1163,7 @@ export default function StudyNotesApp() {
 
       {/* Main Content */}
       <main className="max-w-6xl mx-auto px-4 py-6">
-        {/* Subjects List - REMOVED ADD SUBJECT BUTTON */}
+        {/* Subjects List */}
         {activeView === 'subjects' && !selectedSubject && (
           <div>
             <div className="mb-6">
@@ -948,6 +1275,34 @@ export default function StudyNotesApp() {
                 <Star size={16} className={showImportantOnly ? 'fill-amber-500' : ''} />
                 Important Only
               </button>
+
+              {/* Export PDF Button */}
+              {selectedTab === 'mistakes' && selectedModule && currentMistakes.length > 0 && (
+                <button
+                  onClick={handleExportPDF}
+                  className={`flex items-center gap-2 px-3 py-2 rounded-lg border transition-colors ${
+                    darkMode
+                      ? 'border-gray-600 text-gray-300 hover:border-green-500 hover:text-green-400'
+                      : 'border-gray-300 text-gray-600 hover:border-green-500 hover:text-green-500'
+                  }`}
+                >
+                  <Download size={16} />
+                  Export PDF
+                </button>
+              )}
+
+              {/* Reorder Toggle */}
+              <button
+                onClick={() => setIsReordering(!isReordering)}
+                className={`flex items-center gap-2 px-3 py-2 rounded-lg border transition-colors ${
+                  isReordering
+                    ? 'border-purple-500 text-purple-500 bg-purple-500/10'
+                    : `${borderColor} ${secondaryText}`
+                }`}
+              >
+                <GripVertical size={16} />
+                {isReordering ? 'Done Reordering' : 'Reorder'}
+              </button>
             </div>
 
             {/* Module Selector with Delete Button */}
@@ -1031,21 +1386,55 @@ export default function StudyNotesApp() {
                   </div>
                 ) : (
                   <>
-                    {currentMistakes.map((mistake) => (
-                      <MistakeCard
-                        key={mistake.id}
-                        mistake={mistake}
-                        modules={modules.filter(m => m.module_type === 'mistake' && m.name !== 'General')}
-                        mistakeTypes={mistakeTypes}
-                        darkMode={darkMode}
-                        onUpdate={(updates) => updateMistake(mistake.id, updates)}
-                        onDelete={() => deleteMistake(mistake.id)}
-                        onAddRedoAttempt={(attempt) => addRedoAttempt(mistake.id, attempt)}
-                        onStartFlashcard={() => setFlashcardItems([{ ...mistake, type: 'mistake' }])}
-                        borderColor={borderColor}
-                        secondaryText={secondaryText}
-                      />
-                    ))}
+                    {isReordering ? (
+                      <Reorder.Group
+                        axis="y"
+                        values={currentMistakes}
+                        onReorder={handleReorderMistakes}
+                        className="space-y-3"
+                      >
+                        {currentMistakes.map((mistake) => (
+                          <Reorder.Item
+                            key={mistake.id}
+                            value={mistake}
+                            className="cursor-grab active:cursor-grabbing"
+                          >
+                            <MistakeCard
+                              mistake={mistake}
+                              modules={modules.filter(m => m.module_type === 'mistake' && m.name !== 'General')}
+                              mistakeTypes={mistakeTypes}
+                              darkMode={darkMode}
+                              onUpdate={(updates) => updateMistake(mistake.id, updates)}
+                              onDelete={() => deleteMistake(mistake.id)}
+                              onAddRedoAttempt={(attempt) => addRedoAttempt(mistake.id, attempt)}
+                              onStartFlashcard={() => setFlashcardItems([{ ...mistake, type: 'mistake' }])}
+                              onTrackChanges={(data) => trackUnsavedChanges(mistake.id, data)}
+                              borderColor={borderColor}
+                              secondaryText={secondaryText}
+                              isReordering={isReordering}
+                            />
+                          </Reorder.Item>
+                        ))}
+                      </Reorder.Group>
+                    ) : (
+                      currentMistakes.map((mistake) => (
+                        <MistakeCard
+                          key={mistake.id}
+                          mistake={mistake}
+                          modules={modules.filter(m => m.module_type === 'mistake' && m.name !== 'General')}
+                          mistakeTypes={mistakeTypes}
+                          darkMode={darkMode}
+                          onUpdate={(updates) => updateMistake(mistake.id, updates)}
+                          onDelete={() => deleteMistake(mistake.id)}
+                          onAddRedoAttempt={(attempt) => addRedoAttempt(mistake.id, attempt)}
+                          onStartFlashcard={() => setFlashcardItems([{ ...mistake, type: 'mistake' }])}
+                          onTrackChanges={(data) => trackUnsavedChanges(mistake.id, data)}
+                          borderColor={borderColor}
+                          secondaryText={secondaryText}
+                          isReordering={false}
+                        />
+                      ))
+                    )}
 
                     {currentMistakes.length === 0 && (
                       <div className={`text-center py-12 ${secondaryText}`}>
@@ -1081,15 +1470,41 @@ export default function StudyNotesApp() {
                   </div>
                 ) : (
                   <>
-                    {currentTips.map((tip) => (
-                      <TipCard
-                        key={tip.id}
-                        tip={tip}
-                        darkMode={darkMode}
-                        onUpdate={(updates) => updateTip(tip.id, updates)}
-                        onDelete={() => deleteTip(tip.id)}
-                      />
-                    ))}
+                    {isReordering ? (
+                      <Reorder.Group
+                        axis="y"
+                        values={currentTips}
+                        onReorder={handleReorderTips}
+                        className="space-y-3"
+                      >
+                        {currentTips.map((tip) => (
+                          <Reorder.Item
+                            key={tip.id}
+                            value={tip}
+                            className="cursor-grab active:cursor-grabbing"
+                          >
+                            <TipCard
+                              tip={tip}
+                              darkMode={darkMode}
+                              onUpdate={(updates) => updateTip(tip.id, updates)}
+                              onDelete={() => deleteTip(tip.id)}
+                              isReordering={isReordering}
+                            />
+                          </Reorder.Item>
+                        ))}
+                      </Reorder.Group>
+                    ) : (
+                      currentTips.map((tip) => (
+                        <TipCard
+                          key={tip.id}
+                          tip={tip}
+                          darkMode={darkMode}
+                          onUpdate={(updates) => updateTip(tip.id, updates)}
+                          onDelete={() => deleteTip(tip.id)}
+                          isReordering={false}
+                        />
+                      ))
+                    )}
 
                     {currentTips.length === 0 && (
                       <div className={`text-center py-12 ${secondaryText}`}>
@@ -1178,17 +1593,26 @@ export default function StudyNotesApp() {
   )
 }
 
-// Mistake Card Component
-function MistakeCard({ mistake, modules, mistakeTypes, darkMode, onUpdate, onDelete, onAddRedoAttempt, onStartFlashcard, borderColor, secondaryText }) {
+// Mistake Card Component - UPDATED with Quick Redo and Schedule Editor
+function MistakeCard({ mistake, modules, mistakeTypes, darkMode, onUpdate, onDelete, onAddRedoAttempt, onStartFlashcard, onTrackChanges, borderColor, secondaryText, isReordering }) {
   const [isExpanded, setIsExpanded] = useState(mistake.isNew)
   const [isEditing, setIsEditing] = useState(mistake.isNew)
   const [editData, setEditData] = useState(mistake)
   const [showRedoForm, setShowRedoForm] = useState(false)
+  const [showQuickRedo, setShowQuickRedo] = useState(false)
   const [newRedoText, setNewRedoText] = useState('')
   const [newRedoStatus, setNewRedoStatus] = useState('success')
   const [newRedoImage, setNewRedoImage] = useState(null)
   const [expandedAttempts, setExpandedAttempts] = useState({})
   const [saving, setSaving] = useState(false)
+  const [showScheduleEditor, setShowScheduleEditor] = useState(false)
+
+  // Track changes for auto-save
+  useEffect(() => {
+    if (isEditing && !mistake.isNew) {
+      onTrackChanges?.(editData)
+    }
+  }, [editData, isEditing])
 
   const handleSave = async () => {
     setSaving(true)
@@ -1222,9 +1646,24 @@ function MistakeCard({ mistake, modules, mistakeTypes, darkMode, onUpdate, onDel
     setShowRedoForm(false)
   }
 
+  const handleQuickRedoSubmit = async (attempt) => {
+    await onAddRedoAttempt(attempt)
+    setShowQuickRedo(false)
+  }
+
   const scheduleRedo = (days) => {
     const newDate = addDays(new Date(), days)
     setEditData({ ...editData, scheduled_redo: newDate.toISOString() })
+  }
+
+  const updateSchedule = async (newDate) => {
+    await onUpdate({ scheduled_redo: newDate })
+    setShowScheduleEditor(false)
+  }
+
+  const clearSchedule = async () => {
+    await onUpdate({ scheduled_redo: null })
+    setShowScheduleEditor(false)
   }
 
   const dueStatus = useMemo(() => {
@@ -1247,22 +1686,23 @@ function MistakeCard({ mistake, modules, mistakeTypes, darkMode, onUpdate, onDel
         className={`flex items-center gap-3 px-4 py-3 cursor-pointer transition-colors ${
           darkMode ? 'hover:bg-gray-700/50' : 'hover:bg-gray-50'
         }`}
-        onClick={() => !mistake.isNew && setIsExpanded(!isExpanded)}
+        onClick={() => !mistake.isNew && !isReordering && setIsExpanded(!isExpanded)}
       >
-        <div 
-          className={`touch-none cursor-grab active:cursor-grabbing p-1 -m-1 ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}
-          onTouchStart={(e) => e.stopPropagation()}
-        >
-          <GripVertical size={16} />
-        </div>
+        {isReordering && (
+          <div className={`p-1 ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>
+            <GripVertical size={16} />
+          </div>
+        )}
         
-        <button onClick={(e) => { e.stopPropagation(); if (!mistake.isNew) setIsExpanded(!isExpanded); }}>
-          {isExpanded ? (
-            <ChevronDown size={18} className={darkMode ? 'text-gray-400' : 'text-gray-500'} />
-          ) : (
-            <ChevronRight size={18} className={darkMode ? 'text-gray-400' : 'text-gray-500'} />
-          )}
-        </button>
+        {!isReordering && (
+          <button onClick={(e) => { e.stopPropagation(); if (!mistake.isNew) setIsExpanded(!isExpanded); }}>
+            {isExpanded ? (
+              <ChevronDown size={18} className={darkMode ? 'text-gray-400' : 'text-gray-500'} />
+            ) : (
+              <ChevronRight size={18} className={darkMode ? 'text-gray-400' : 'text-gray-500'} />
+            )}
+          </button>
+        )}
 
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
@@ -1308,33 +1748,128 @@ function MistakeCard({ mistake, modules, mistakeTypes, darkMode, onUpdate, onDel
           </div>
         </div>
 
-        <div className="flex items-center gap-1">
-          <button
-            onClick={(e) => { e.stopPropagation(); onStartFlashcard(); }}
-            className={`p-2 rounded-lg transition-colors ${
-              darkMode ? 'hover:bg-gray-600 text-gray-400' : 'hover:bg-gray-100 text-gray-500'
-            }`}
-          >
-            <Play size={16} />
-          </button>
-          <button
-            onClick={(e) => { e.stopPropagation(); setIsEditing(true); setIsExpanded(true); }}
-            className={`p-2 rounded-lg transition-colors ${
-              darkMode ? 'hover:bg-gray-600 text-gray-400' : 'hover:bg-gray-100 text-gray-500'
-            }`}
-          >
-            <Edit3 size={16} />
-          </button>
-          <button
-            onClick={(e) => { e.stopPropagation(); onDelete(); }}
-            className={`p-2 rounded-lg transition-colors ${
-              darkMode ? 'hover:bg-red-500/20 text-gray-400 hover:text-red-400' : 'hover:bg-red-50 text-gray-500 hover:text-red-500'
-            }`}
-          >
-            <Trash2 size={16} />
-          </button>
-        </div>
+        {!isReordering && (
+          <div className="flex items-center gap-1">
+            {/* Quick Redo Button */}
+            <button
+              onClick={(e) => { e.stopPropagation(); setShowQuickRedo(!showQuickRedo); }}
+              className={`p-2 rounded-lg transition-colors ${
+                showQuickRedo
+                  ? 'bg-green-500/20 text-green-400'
+                  : darkMode ? 'hover:bg-gray-600 text-gray-400' : 'hover:bg-gray-100 text-gray-500'
+              }`}
+              title="Quick Redo"
+            >
+              <RotateCcw size={16} />
+            </button>
+            {/* Schedule Button */}
+            {mistake.scheduled_redo && (
+              <button
+                onClick={(e) => { e.stopPropagation(); setShowScheduleEditor(!showScheduleEditor); }}
+                className={`p-2 rounded-lg transition-colors ${
+                  darkMode ? 'hover:bg-gray-600 text-blue-400' : 'hover:bg-gray-100 text-blue-500'
+                }`}
+                title="Edit Schedule"
+              >
+                <Calendar size={16} />
+              </button>
+            )}
+            <button
+              onClick={(e) => { e.stopPropagation(); onStartFlashcard(); }}
+              className={`p-2 rounded-lg transition-colors ${
+                darkMode ? 'hover:bg-gray-600 text-gray-400' : 'hover:bg-gray-100 text-gray-500'
+              }`}
+            >
+              <Play size={16} />
+            </button>
+            <button
+              onClick={(e) => { e.stopPropagation(); setIsEditing(true); setIsExpanded(true); }}
+              className={`p-2 rounded-lg transition-colors ${
+                darkMode ? 'hover:bg-gray-600 text-gray-400' : 'hover:bg-gray-100 text-gray-500'
+              }`}
+            >
+              <Edit3 size={16} />
+            </button>
+            <button
+              onClick={(e) => { e.stopPropagation(); onDelete(); }}
+              className={`p-2 rounded-lg transition-colors ${
+                darkMode ? 'hover:bg-red-500/20 text-gray-400 hover:text-red-400' : 'hover:bg-red-50 text-gray-500 hover:text-red-500'
+              }`}
+            >
+              <Trash2 size={16} />
+            </button>
+          </div>
+        )}
       </div>
+
+      {/* Quick Redo Form (outside expanded view) */}
+      {showQuickRedo && !isExpanded && (
+        <div className={`px-4 pb-4 border-t ${borderColor}`}>
+          <QuickRedoForm
+            onSubmit={handleQuickRedoSubmit}
+            onCancel={() => setShowQuickRedo(false)}
+            darkMode={darkMode}
+          />
+        </div>
+      )}
+
+      {/* Schedule Editor Popup */}
+      {showScheduleEditor && !isExpanded && (
+        <div className={`px-4 pb-4 border-t ${borderColor}`}>
+          <div className={`p-4 rounded-lg ${darkMode ? 'bg-gray-700/50' : 'bg-gray-50'}`}>
+            <h4 className={`text-sm font-medium mb-3 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+              Edit Schedule
+            </h4>
+            <p className={`text-sm mb-3 ${secondaryText}`}>
+              Currently scheduled: {formatDate(mistake.scheduled_redo)}
+            </p>
+            <div className="flex flex-wrap gap-2 mb-3">
+              {redoIntervals.map(({ days, label }) => (
+                <button
+                  key={days}
+                  type="button"
+                  onClick={() => updateSchedule(addDays(new Date(), days).toISOString())}
+                  className={`px-3 py-1 text-sm rounded-lg border transition-colors ${
+                    darkMode
+                      ? 'border-gray-600 text-gray-300 hover:border-blue-500 hover:text-blue-400'
+                      : 'border-gray-300 text-gray-600 hover:border-blue-500 hover:text-blue-500'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="date"
+                defaultValue={mistake.scheduled_redo ? new Date(mistake.scheduled_redo).toISOString().split('T')[0] : ''}
+                onChange={(e) => e.target.value && updateSchedule(new Date(e.target.value).toISOString())}
+                className={`px-3 py-2 text-sm rounded-lg border ${
+                  darkMode
+                    ? 'bg-gray-800 border-gray-600 text-gray-300'
+                    : 'bg-white border-gray-300 text-gray-600'
+                }`}
+              />
+              <button
+                onClick={clearSchedule}
+                className={`px-3 py-2 text-sm rounded-lg ${
+                  darkMode ? 'text-red-400 hover:bg-red-500/20' : 'text-red-500 hover:bg-red-50'
+                }`}
+              >
+                Remove
+              </button>
+              <button
+                onClick={() => setShowScheduleEditor(false)}
+                className={`px-3 py-2 text-sm rounded-lg ${
+                  darkMode ? 'text-gray-400 hover:text-gray-300' : 'text-gray-500 hover:text-gray-600'
+                }`}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Expanded Content */}
       <AnimatePresence>
@@ -1489,7 +2024,23 @@ function MistakeCard({ mistake, modules, mistakeTypes, darkMode, onUpdate, onDel
                             : 'bg-white border-gray-300 text-gray-600'
                         }`}
                       />
+                      {editData.scheduled_redo && (
+                        <button
+                          type="button"
+                          onClick={() => setEditData({ ...editData, scheduled_redo: null })}
+                          className={`px-3 py-1 text-sm rounded-lg ${
+                            darkMode ? 'text-red-400 hover:bg-red-500/20' : 'text-red-500 hover:bg-red-50'
+                          }`}
+                        >
+                          Clear
+                        </button>
+                      )}
                     </div>
+                    {editData.scheduled_redo && (
+                      <p className={`text-sm mt-2 ${secondaryText}`}>
+                        Scheduled for: {formatDate(editData.scheduled_redo)}
+                      </p>
+                    )}
                   </div>
 
                   <div className="flex justify-end gap-2 pt-2">
@@ -1517,35 +2068,119 @@ function MistakeCard({ mistake, modules, mistakeTypes, darkMode, onUpdate, onDel
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {mistake.question && (
+                  {/* FIXED: Always show images even when text is empty */}
+                  {(mistake.question || mistake.question_image) && (
                     <div>
                       <h4 className={`text-sm font-medium mb-1 ${secondaryText}`}>Original Question</h4>
-                      <p className={`${darkMode ? 'text-gray-200' : 'text-gray-800'} whitespace-pre-wrap`}>{mistake.question}</p>
+                      {mistake.question && (
+                        <p className={`${darkMode ? 'text-gray-200' : 'text-gray-800'} whitespace-pre-wrap`}>{mistake.question}</p>
+                      )}
                       {mistake.question_image && <img src={mistake.question_image} alt="" className="mt-2 max-h-60 rounded-lg" />}
                     </div>
                   )}
 
-                  {mistake.incorrect_answer && (
+                  {(mistake.incorrect_answer || mistake.incorrect_answer_image) && (
                     <div>
                       <h4 className={`text-sm font-medium mb-1 ${secondaryText}`}>My Incorrect Answer</h4>
-                      <p className={`${darkMode ? 'text-gray-200' : 'text-gray-800'} whitespace-pre-wrap`}>{mistake.incorrect_answer}</p>
+                      {mistake.incorrect_answer && (
+                        <p className={`${darkMode ? 'text-gray-200' : 'text-gray-800'} whitespace-pre-wrap`}>{mistake.incorrect_answer}</p>
+                      )}
                       {mistake.incorrect_answer_image && <img src={mistake.incorrect_answer_image} alt="" className="mt-2 max-h-60 rounded-lg" />}
                     </div>
                   )}
 
-                  {mistake.model_answer && (
+                  {(mistake.model_answer || mistake.model_answer_image) && (
                     <div>
                       <h4 className={`text-sm font-medium mb-1 ${secondaryText}`}>Model Answer</h4>
-                      <p className={`${darkMode ? 'text-gray-200' : 'text-gray-800'} whitespace-pre-wrap`}>{mistake.model_answer}</p>
+                      {mistake.model_answer && (
+                        <p className={`${darkMode ? 'text-gray-200' : 'text-gray-800'} whitespace-pre-wrap`}>{mistake.model_answer}</p>
+                      )}
                       {mistake.model_answer_image && <img src={mistake.model_answer_image} alt="" className="mt-2 max-h-60 rounded-lg" />}
                     </div>
                   )}
 
-                  {mistake.explanation && (
+                  {(mistake.explanation || mistake.explanation_image) && (
                     <div>
                       <h4 className={`text-sm font-medium mb-1 ${secondaryText}`}>Explanation</h4>
-                      <p className={`${darkMode ? 'text-gray-200' : 'text-gray-800'} whitespace-pre-wrap`}>{mistake.explanation}</p>
+                      {mistake.explanation && (
+                        <p className={`${darkMode ? 'text-gray-200' : 'text-gray-800'} whitespace-pre-wrap`}>{mistake.explanation}</p>
+                      )}
                       {mistake.explanation_image && <img src={mistake.explanation_image} alt="" className="mt-2 max-h-60 rounded-lg" />}
+                    </div>
+                  )}
+
+                  {/* Scheduled Redo Info */}
+                  {mistake.scheduled_redo && (
+                    <div className={`p-3 rounded-lg ${darkMode ? 'bg-blue-500/10' : 'bg-blue-50'}`}>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Calendar size={16} className="text-blue-500" />
+                          <span className={`text-sm ${darkMode ? 'text-blue-400' : 'text-blue-600'}`}>
+                            Scheduled for: {formatDate(mistake.scheduled_redo)}
+                          </span>
+                        </div>
+                        <button
+                          onClick={() => setShowScheduleEditor(true)}
+                          className={`text-sm ${darkMode ? 'text-blue-400 hover:text-blue-300' : 'text-blue-500 hover:text-blue-600'}`}
+                        >
+                          Edit
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Schedule Editor in expanded view */}
+                  {showScheduleEditor && (
+                    <div className={`p-4 rounded-lg ${darkMode ? 'bg-gray-700/50' : 'bg-gray-50'}`}>
+                      <h4 className={`text-sm font-medium mb-3 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                        {mistake.scheduled_redo ? 'Edit Schedule' : 'Add Schedule'}
+                      </h4>
+                      <div className="flex flex-wrap gap-2 mb-3">
+                        {redoIntervals.map(({ days, label }) => (
+                          <button
+                            key={days}
+                            type="button"
+                            onClick={() => updateSchedule(addDays(new Date(), days).toISOString())}
+                            className={`px-3 py-1 text-sm rounded-lg border transition-colors ${
+                              darkMode
+                                ? 'border-gray-600 text-gray-300 hover:border-blue-500 hover:text-blue-400'
+                                : 'border-gray-300 text-gray-600 hover:border-blue-500 hover:text-blue-500'
+                            }`}
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="date"
+                          defaultValue={mistake.scheduled_redo ? new Date(mistake.scheduled_redo).toISOString().split('T')[0] : ''}
+                          onChange={(e) => e.target.value && updateSchedule(new Date(e.target.value).toISOString())}
+                          className={`px-3 py-2 text-sm rounded-lg border ${
+                            darkMode
+                              ? 'bg-gray-800 border-gray-600 text-gray-300'
+                              : 'bg-white border-gray-300 text-gray-600'
+                          }`}
+                        />
+                        {mistake.scheduled_redo && (
+                          <button
+                            onClick={clearSchedule}
+                            className={`px-3 py-2 text-sm rounded-lg ${
+                              darkMode ? 'text-red-400 hover:bg-red-500/20' : 'text-red-500 hover:bg-red-50'
+                            }`}
+                          >
+                            Remove
+                          </button>
+                        )}
+                        <button
+                          onClick={() => setShowScheduleEditor(false)}
+                          className={`px-3 py-2 text-sm rounded-lg ${
+                            darkMode ? 'text-gray-400 hover:text-gray-300' : 'text-gray-500 hover:text-gray-600'
+                          }`}
+                        >
+                          Cancel
+                        </button>
+                      </div>
                     </div>
                   )}
 
@@ -1652,9 +2287,14 @@ function MistakeCard({ mistake, modules, mistakeTypes, darkMode, onUpdate, onDel
                           
                           {isAttemptExpanded && (
                             <div className={`px-3 pb-3 ${secondaryText}`}>
-                              <p className="whitespace-pre-wrap">{attempt.notes}</p>
+                              {attempt.notes && (
+                                <p className="whitespace-pre-wrap">{attempt.notes}</p>
+                              )}
                               {attempt.image && (
                                 <img src={attempt.image} alt="" className="mt-2 max-h-40 rounded-lg" />
+                              )}
+                              {!attempt.notes && !attempt.image && (
+                                <p className="italic">No notes for this attempt</p>
                               )}
                             </div>
                           )}
@@ -1672,8 +2312,8 @@ function MistakeCard({ mistake, modules, mistakeTypes, darkMode, onUpdate, onDel
   )
 }
 
-// Tip Card Component
-function TipCard({ tip, darkMode, onUpdate, onDelete }) {
+// Tip Card Component - UPDATED with reordering support
+function TipCard({ tip, darkMode, onUpdate, onDelete, isReordering }) {
   const [isEditing, setIsEditing] = useState(false)
   const [editText, setEditText] = useState(tip.text)
 
@@ -1692,12 +2332,11 @@ function TipCard({ tip, darkMode, onUpdate, onDelete }) {
         darkMode ? 'bg-gray-800/50' : 'bg-white'
       } ${tip.is_important ? (darkMode ? 'ring-2 ring-amber-500/50' : 'ring-2 ring-amber-400/50') : ''}`}
     >
-      <div 
-        className={`touch-none cursor-grab active:cursor-grabbing p-1 -m-1 mt-1 ${darkMode ? 'text-gray-500' : 'text-gray-400'} flex-shrink-0`}
-        onTouchStart={(e) => e.stopPropagation()}
-      >
-        <GripVertical size={16} />
-      </div>
+      {isReordering && (
+        <div className={`p-1 mt-1 ${darkMode ? 'text-gray-500' : 'text-gray-400'} flex-shrink-0`}>
+          <GripVertical size={16} />
+        </div>
+      )}
       <Lightbulb size={16} className="mt-1 text-amber-500 flex-shrink-0" />
       
       {isEditing ? (
@@ -1735,34 +2374,36 @@ function TipCard({ tip, darkMode, onUpdate, onDelete }) {
             <p className={`flex-1 ${darkMode ? 'text-gray-200' : 'text-gray-800'}`}>{tip.text}</p>
             {tip.is_important && <Star size={14} className="text-amber-500 fill-amber-500 flex-shrink-0 mt-1" />}
           </div>
-          <div className="flex items-center gap-1 flex-shrink-0">
-            <button
-              onClick={toggleImportant}
-              className={`p-1.5 rounded-lg transition-colors ${
-                tip.is_important
-                  ? 'text-amber-500 hover:bg-amber-500/20'
-                  : darkMode ? 'hover:bg-gray-700 text-gray-400' : 'hover:bg-gray-100 text-gray-500'
-              }`}
-            >
-              <Star size={14} className={tip.is_important ? 'fill-amber-500' : ''} />
-            </button>
-            <button
-              onClick={() => setIsEditing(true)}
-              className={`p-1.5 rounded-lg transition-colors ${
-                darkMode ? 'hover:bg-gray-700 text-gray-400' : 'hover:bg-gray-100 text-gray-500'
-              }`}
-            >
-              <Edit3 size={14} />
-            </button>
-            <button
-              onClick={onDelete}
-              className={`p-1.5 rounded-lg transition-colors ${
-                darkMode ? 'hover:bg-red-500/20 text-gray-400 hover:text-red-400' : 'hover:bg-red-50 text-gray-500 hover:text-red-500'
-              }`}
-            >
-              <Trash2 size={14} />
-            </button>
-          </div>
+          {!isReordering && (
+            <div className="flex items-center gap-1 flex-shrink-0">
+              <button
+                onClick={toggleImportant}
+                className={`p-1.5 rounded-lg transition-colors ${
+                  tip.is_important
+                    ? 'text-amber-500 hover:bg-amber-500/20'
+                    : darkMode ? 'hover:bg-gray-700 text-gray-400' : 'hover:bg-gray-100 text-gray-500'
+                }`}
+              >
+                <Star size={14} className={tip.is_important ? 'fill-amber-500' : ''} />
+              </button>
+              <button
+                onClick={() => setIsEditing(true)}
+                className={`p-1.5 rounded-lg transition-colors ${
+                  darkMode ? 'hover:bg-gray-700 text-gray-400' : 'hover:bg-gray-100 text-gray-500'
+                }`}
+              >
+                <Edit3 size={14} />
+              </button>
+              <button
+                onClick={onDelete}
+                className={`p-1.5 rounded-lg transition-colors ${
+                  darkMode ? 'hover:bg-red-500/20 text-gray-400 hover:text-red-400' : 'hover:bg-red-50 text-gray-500 hover:text-red-500'
+                }`}
+              >
+                <Trash2 size={14} />
+              </button>
+            </div>
+          )}
         </>
       )}
     </div>
