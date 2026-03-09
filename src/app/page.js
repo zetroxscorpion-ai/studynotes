@@ -188,7 +188,7 @@ const redoStatuses = [
   { id: 'fail', label: 'Fail', color: 'red' },
 ]
 
-// PDF Export Function
+// PDF Export Function with Images
 const exportToPDF = async (mistakes, subject, module, darkMode) => {
   // Dynamic import to avoid SSR issues
   const { jsPDF } = await import('jspdf')
@@ -196,8 +196,68 @@ const exportToPDF = async (mistakes, subject, module, darkMode) => {
   const doc = new jsPDF()
   let yPosition = 20
   const pageHeight = doc.internal.pageSize.height
+  const pageWidth = doc.internal.pageSize.width
   const margin = 20
   const lineHeight = 7
+  const maxImageWidth = pageWidth - (margin * 2)
+  const maxImageHeight = 80
+  
+  // Helper to load and add image to PDF
+  const addImageToPDF = async (imageUrl, label) => {
+    if (!imageUrl) return yPosition
+    
+    try {
+      // Add label
+      if (yPosition > pageHeight - 100) { doc.addPage(); yPosition = 20 }
+      doc.setFont('helvetica', 'bold')
+      doc.text(label + ':', margin, yPosition)
+      yPosition += lineHeight + 2
+      
+      // Load image
+      const img = new Image()
+      img.crossOrigin = 'anonymous'
+      await new Promise((resolve, reject) => {
+        img.onload = resolve
+        img.onerror = reject
+        img.src = imageUrl
+      })
+      
+      // Calculate dimensions
+      let imgWidth = img.width
+      let imgHeight = img.height
+      const aspectRatio = imgWidth / imgHeight
+      
+      if (imgWidth > maxImageWidth) {
+        imgWidth = maxImageWidth
+        imgHeight = imgWidth / aspectRatio
+      }
+      if (imgHeight > maxImageHeight) {
+        imgHeight = maxImageHeight
+        imgWidth = imgHeight * aspectRatio
+      }
+      
+      // Center image
+      const xPosition = (pageWidth - imgWidth) / 2
+      
+      if (yPosition + imgHeight > pageHeight - margin) {
+        doc.addPage()
+        yPosition = 20
+      }
+      
+      doc.addImage(img, 'JPEG', xPosition, yPosition, imgWidth, imgHeight)
+      yPosition += imgHeight + 5
+      
+    } catch (err) {
+      console.error('Failed to add image:', err)
+      doc.setFont('helvetica', 'italic')
+      doc.setTextColor(150, 150, 150)
+      doc.text('[Image unavailable]', margin, yPosition)
+      doc.setTextColor(0, 0, 0)
+      yPosition += lineHeight + 3
+    }
+    
+    return yPosition
+  }
   
   // Title
   doc.setFontSize(20)
@@ -221,60 +281,80 @@ const exportToPDF = async (mistakes, subject, module, darkMode) => {
     doc.setFontSize(14)
     doc.setFont('helvetica', 'bold')
     const title = mistake.title || 'Untitled Question'
-    doc.text(title + (mistake.is_important ? ' ⭐' : ''), margin, yPosition)
+    doc.text(title + (mistake.is_important ? ' [Important]' : ''), margin, yPosition)
     yPosition += lineHeight + 3
     
     doc.setFontSize(10)
     doc.setFont('helvetica', 'normal')
     
-    // Question
-    if (mistake.question) {
-      doc.setFont('helvetica', 'bold')
-      doc.text('Question:', margin, yPosition)
-      yPosition += lineHeight
-      doc.setFont('helvetica', 'normal')
-      const questionLines = doc.splitTextToSize(mistake.question, 170)
-      doc.text(questionLines, margin, yPosition)
-      yPosition += questionLines.length * lineHeight + 3
+    // Question (text + image)
+    if (mistake.question || mistake.question_image) {
+      if (mistake.question) {
+        doc.setFont('helvetica', 'bold')
+        doc.text('Question:', margin, yPosition)
+        yPosition += lineHeight
+        doc.setFont('helvetica', 'normal')
+        const questionLines = doc.splitTextToSize(mistake.question, 170)
+        doc.text(questionLines, margin, yPosition)
+        yPosition += questionLines.length * lineHeight + 3
+      }
+      if (mistake.question_image) {
+        yPosition = await addImageToPDF(mistake.question_image, 'Question Image')
+      }
     }
     
-    // Incorrect Answer
-    if (mistake.incorrect_answer) {
-      if (yPosition > pageHeight - 40) { doc.addPage(); yPosition = 20 }
-      doc.setFont('helvetica', 'bold')
-      doc.text('My Incorrect Answer:', margin, yPosition)
-      yPosition += lineHeight
-      doc.setFont('helvetica', 'normal')
-      const incorrectLines = doc.splitTextToSize(mistake.incorrect_answer, 170)
-      doc.text(incorrectLines, margin, yPosition)
-      yPosition += incorrectLines.length * lineHeight + 3
+    // Incorrect Answer (text + image)
+    if (mistake.incorrect_answer || mistake.incorrect_answer_image) {
+      if (yPosition > pageHeight - 100) { doc.addPage(); yPosition = 20 }
+      if (mistake.incorrect_answer) {
+        doc.setFont('helvetica', 'bold')
+        doc.text('My Incorrect Answer:', margin, yPosition)
+        yPosition += lineHeight
+        doc.setFont('helvetica', 'normal')
+        const incorrectLines = doc.splitTextToSize(mistake.incorrect_answer, 170)
+        doc.text(incorrectLines, margin, yPosition)
+        yPosition += incorrectLines.length * lineHeight + 3
+      }
+      if (mistake.incorrect_answer_image) {
+        yPosition = await addImageToPDF(mistake.incorrect_answer_image, 'Incorrect Answer Image')
+      }
     }
     
-    // Model Answer
-    if (mistake.model_answer) {
-      if (yPosition > pageHeight - 40) { doc.addPage(); yPosition = 20 }
-      doc.setFont('helvetica', 'bold')
-      doc.text('Model Answer:', margin, yPosition)
-      yPosition += lineHeight
-      doc.setFont('helvetica', 'normal')
-      const modelLines = doc.splitTextToSize(mistake.model_answer, 170)
-      doc.text(modelLines, margin, yPosition)
-      yPosition += modelLines.length * lineHeight + 3
+    // Model Answer (text + image)
+    if (mistake.model_answer || mistake.model_answer_image) {
+      if (yPosition > pageHeight - 100) { doc.addPage(); yPosition = 20 }
+      if (mistake.model_answer) {
+        doc.setFont('helvetica', 'bold')
+        doc.text('Model Answer:', margin, yPosition)
+        yPosition += lineHeight
+        doc.setFont('helvetica', 'normal')
+        const modelLines = doc.splitTextToSize(mistake.model_answer, 170)
+        doc.text(modelLines, margin, yPosition)
+        yPosition += modelLines.length * lineHeight + 3
+      }
+      if (mistake.model_answer_image) {
+        yPosition = await addImageToPDF(mistake.model_answer_image, 'Model Answer Image')
+      }
     }
     
-    // Explanation
-    if (mistake.explanation) {
-      if (yPosition > pageHeight - 40) { doc.addPage(); yPosition = 20 }
-      doc.setFont('helvetica', 'bold')
-      doc.text('Explanation:', margin, yPosition)
-      yPosition += lineHeight
-      doc.setFont('helvetica', 'normal')
-      const explainLines = doc.splitTextToSize(mistake.explanation, 170)
-      doc.text(explainLines, margin, yPosition)
-      yPosition += explainLines.length * lineHeight + 3
+    // Explanation (text + image)
+    if (mistake.explanation || mistake.explanation_image) {
+      if (yPosition > pageHeight - 100) { doc.addPage(); yPosition = 20 }
+      if (mistake.explanation) {
+        doc.setFont('helvetica', 'bold')
+        doc.text('Explanation:', margin, yPosition)
+        yPosition += lineHeight
+        doc.setFont('helvetica', 'normal')
+        const explainLines = doc.splitTextToSize(mistake.explanation, 170)
+        doc.text(explainLines, margin, yPosition)
+        yPosition += explainLines.length * lineHeight + 3
+      }
+      if (mistake.explanation_image) {
+        yPosition = await addImageToPDF(mistake.explanation_image, 'Explanation Image')
+      }
     }
     
-    // Redo Attempts
+    // Redo Attempts with improved display
     if (mistake.redo_attempts?.length > 0) {
       if (yPosition > pageHeight - 40) { doc.addPage(); yPosition = 20 }
       doc.setFont('helvetica', 'bold')
@@ -282,17 +362,39 @@ const exportToPDF = async (mistakes, subject, module, darkMode) => {
       yPosition += lineHeight
       doc.setFont('helvetica', 'normal')
       
-      mistake.redo_attempts.forEach((attempt, index) => {
+      for (const attempt of mistake.redo_attempts) {
         if (yPosition > pageHeight - 30) { doc.addPage(); yPosition = 20 }
-        const statusEmoji = attempt.status === 'success' ? '✓' : attempt.status === 'partial' ? '~' : '✗'
-        doc.text(`  ${index + 1}. [${statusEmoji}] ${formatDate(attempt.attempt_date)}`, margin, yPosition)
+        
+        // Status with color coding
+        const statusText = attempt.status === 'success' ? 'SUCCESS' : 
+                          attempt.status === 'partial' ? 'PARTIAL' : 'FAIL'
+        const statusColor = attempt.status === 'success' ? [0, 150, 0] : 
+                           attempt.status === 'partial' ? [200, 150, 0] : [200, 0, 0]
+        
+        doc.setTextColor(...statusColor)
+        doc.setFont('helvetica', 'bold')
+        doc.text(`[${statusText}]`, margin, yPosition)
+        doc.setTextColor(0, 0, 0)
+        doc.setFont('helvetica', 'normal')
+        
+        // Date
+        doc.text(` ${formatDate(attempt.attempt_date)}`, margin + 25, yPosition)
         yPosition += lineHeight
+        
+        // Notes
         if (attempt.notes) {
-          const attemptLines = doc.splitTextToSize(`     ${attempt.notes}`, 160)
-          doc.text(attemptLines, margin, yPosition)
+          const attemptLines = doc.splitTextToSize(attempt.notes, 165)
+          doc.text(attemptLines, margin + 5, yPosition)
           yPosition += attemptLines.length * lineHeight
         }
-      })
+        
+        // Attempt image
+        if (attempt.image) {
+          yPosition = await addImageToPDF(attempt.image, 'Attempt Image')
+        }
+        
+        yPosition += 2
+      }
       yPosition += 3
     }
     
