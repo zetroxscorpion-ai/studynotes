@@ -1057,45 +1057,51 @@ export default function StudyNotesApp() {
 
   // Reorder mistakes
   const handleReorderMistakes = async (newOrder) => {
-    // Update local state first
+    // Update local state first (immediate feedback)
     setMistakeNotes(prev => {
       const otherNotes = prev.filter(n => n.module_id !== selectedModule?.id)
       return [...otherNotes, ...newOrder]
     })
     
-    // Update sort_order in database (only sort_order, not full note)
-    try {
-      await Promise.all(
-        newOrder.map((note, index) => 
-          supabase.from('mistake_notes')
-            .update({ sort_order: index })
+    // Update sort_order in database sequentially to avoid rate limits
+    for (let i = 0; i < newOrder.length; i++) {
+      const note = newOrder[i]
+      // Only update if sort_order changed
+      if (note.sort_order !== i) {
+        try {
+          await supabase
+            .from('mistake_notes')
+            .update({ sort_order: i })
             .eq('id', note.id)
-        )
-      )
-    } catch (err) {
-      console.error('Failed to update sort order:', err)
+        } catch (err) {
+          console.error(`Failed to update sort_order for note ${note.id}:`, err)
+        }
+      }
     }
   }
 
   // Reorder tips
   const handleReorderTips = async (newOrder) => {
-    // Update local state first
+    // Update local state first (immediate feedback)
     setTips(prev => {
       const otherTips = prev.filter(t => t.module_id !== selectedModule?.id)
       return [...otherTips, ...newOrder]
     })
     
-    // Update sort_order in database (only sort_order, not full tip)
-    try {
-      await Promise.all(
-        newOrder.map((tip, index) => 
-          supabase.from('tips')
-            .update({ sort_order: index })
+    // Update sort_order in database sequentially to avoid rate limits
+    for (let i = 0; i < newOrder.length; i++) {
+      const tip = newOrder[i]
+      // Only update if sort_order changed
+      if (tip.sort_order !== i) {
+        try {
+          await supabase
+            .from('tips')
+            .update({ sort_order: i })
             .eq('id', tip.id)
-        )
-      )
-    } catch (err) {
-      console.error('Failed to update sort order:', err)
+        } catch (err) {
+          console.error(`Failed to update sort_order for tip ${tip.id}:`, err)
+        }
+      }
     }
   }
 
