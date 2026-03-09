@@ -188,7 +188,7 @@ const redoStatuses = [
   { id: 'fail', label: 'Fail', color: 'red' },
 ]
 
-// PDF Export Function with Image Support
+// PDF Export Function
 const exportToPDF = async (mistakes, subject, module, darkMode) => {
   // Dynamic import to avoid SSR issues
   const { jsPDF } = await import('jspdf')
@@ -196,66 +196,8 @@ const exportToPDF = async (mistakes, subject, module, darkMode) => {
   const doc = new jsPDF()
   let yPosition = 20
   const pageHeight = doc.internal.pageSize.height
-  const pageWidth = doc.internal.pageSize.width
   const margin = 20
   const lineHeight = 7
-  const maxImageWidth = pageWidth - (margin * 2)
-  const maxImageHeight = 80
-  
-  // Helper to load image and add to PDF
-  const addImageToPDF = async (imageUrl, label) => {
-    if (!imageUrl) return yPosition
-    
-    try {
-      // Add label
-      if (yPosition > pageHeight - 100) { doc.addPage(); yPosition = 20 }
-      doc.setFont('helvetica', 'bold')
-      doc.text(label + ':', margin, yPosition)
-      yPosition += lineHeight + 2
-      
-      // Load and add image
-      const img = new Image()
-      img.crossOrigin = 'anonymous'
-      await new Promise((resolve, reject) => {
-        img.onload = resolve
-        img.onerror = reject
-        img.src = imageUrl
-      })
-      
-      // Calculate dimensions to fit within max size
-      let imgWidth = img.width
-      let imgHeight = img.height
-      const aspectRatio = imgWidth / imgHeight
-      
-      if (imgWidth > maxImageWidth) {
-        imgWidth = maxImageWidth
-        imgHeight = imgWidth / aspectRatio
-      }
-      if (imgHeight > maxImageHeight) {
-        imgHeight = maxImageHeight
-        imgWidth = imgHeight * aspectRatio
-      }
-      
-      // Center the image
-      const xPosition = (pageWidth - imgWidth) / 2
-      
-      if (yPosition + imgHeight > pageHeight - margin) {
-        doc.addPage()
-        yPosition = 20
-      }
-      
-      doc.addImage(img, 'JPEG', xPosition, yPosition, imgWidth, imgHeight)
-      yPosition += imgHeight + 5
-      
-    } catch (err) {
-      console.error('Failed to add image:', err)
-      doc.setFont('helvetica', 'italic')
-      doc.text('[Image failed to load]', margin, yPosition)
-      yPosition += lineHeight + 3
-    }
-    
-    return yPosition
-  }
   
   // Title
   doc.setFontSize(20)
@@ -286,70 +228,50 @@ const exportToPDF = async (mistakes, subject, module, darkMode) => {
     doc.setFont('helvetica', 'normal')
     
     // Question
-    if (mistake.question || mistake.question_image) {
-      if (mistake.question) {
-        doc.setFont('helvetica', 'bold')
-        doc.text('Question:', margin, yPosition)
-        yPosition += lineHeight
-        doc.setFont('helvetica', 'normal')
-        const questionLines = doc.splitTextToSize(mistake.question, 170)
-        doc.text(questionLines, margin, yPosition)
-        yPosition += questionLines.length * lineHeight + 3
-      }
-      if (mistake.question_image) {
-        yPosition = await addImageToPDF(mistake.question_image, 'Question Image')
-      }
+    if (mistake.question) {
+      doc.setFont('helvetica', 'bold')
+      doc.text('Question:', margin, yPosition)
+      yPosition += lineHeight
+      doc.setFont('helvetica', 'normal')
+      const questionLines = doc.splitTextToSize(mistake.question, 170)
+      doc.text(questionLines, margin, yPosition)
+      yPosition += questionLines.length * lineHeight + 3
     }
     
     // Incorrect Answer
-    if (mistake.incorrect_answer || mistake.incorrect_answer_image) {
-      if (yPosition > pageHeight - 100) { doc.addPage(); yPosition = 20 }
-      if (mistake.incorrect_answer) {
-        doc.setFont('helvetica', 'bold')
-        doc.text('My Incorrect Answer:', margin, yPosition)
-        yPosition += lineHeight
-        doc.setFont('helvetica', 'normal')
-        const incorrectLines = doc.splitTextToSize(mistake.incorrect_answer, 170)
-        doc.text(incorrectLines, margin, yPosition)
-        yPosition += incorrectLines.length * lineHeight + 3
-      }
-      if (mistake.incorrect_answer_image) {
-        yPosition = await addImageToPDF(mistake.incorrect_answer_image, 'Incorrect Answer Image')
-      }
+    if (mistake.incorrect_answer) {
+      if (yPosition > pageHeight - 40) { doc.addPage(); yPosition = 20 }
+      doc.setFont('helvetica', 'bold')
+      doc.text('My Incorrect Answer:', margin, yPosition)
+      yPosition += lineHeight
+      doc.setFont('helvetica', 'normal')
+      const incorrectLines = doc.splitTextToSize(mistake.incorrect_answer, 170)
+      doc.text(incorrectLines, margin, yPosition)
+      yPosition += incorrectLines.length * lineHeight + 3
     }
     
     // Model Answer
-    if (mistake.model_answer || mistake.model_answer_image) {
-      if (yPosition > pageHeight - 100) { doc.addPage(); yPosition = 20 }
-      if (mistake.model_answer) {
-        doc.setFont('helvetica', 'bold')
-        doc.text('Model Answer:', margin, yPosition)
-        yPosition += lineHeight
-        doc.setFont('helvetica', 'normal')
-        const modelLines = doc.splitTextToSize(mistake.model_answer, 170)
-        doc.text(modelLines, margin, yPosition)
-        yPosition += modelLines.length * lineHeight + 3
-      }
-      if (mistake.model_answer_image) {
-        yPosition = await addImageToPDF(mistake.model_answer_image, 'Model Answer Image')
-      }
+    if (mistake.model_answer) {
+      if (yPosition > pageHeight - 40) { doc.addPage(); yPosition = 20 }
+      doc.setFont('helvetica', 'bold')
+      doc.text('Model Answer:', margin, yPosition)
+      yPosition += lineHeight
+      doc.setFont('helvetica', 'normal')
+      const modelLines = doc.splitTextToSize(mistake.model_answer, 170)
+      doc.text(modelLines, margin, yPosition)
+      yPosition += modelLines.length * lineHeight + 3
     }
     
     // Explanation
-    if (mistake.explanation || mistake.explanation_image) {
-      if (yPosition > pageHeight - 100) { doc.addPage(); yPosition = 20 }
-      if (mistake.explanation) {
-        doc.setFont('helvetica', 'bold')
-        doc.text('Explanation:', margin, yPosition)
-        yPosition += lineHeight
-        doc.setFont('helvetica', 'normal')
-        const explainLines = doc.splitTextToSize(mistake.explanation, 170)
-        doc.text(explainLines, margin, yPosition)
-        yPosition += explainLines.length * lineHeight + 3
-      }
-      if (mistake.explanation_image) {
-        yPosition = await addImageToPDF(mistake.explanation_image, 'Explanation Image')
-      }
+    if (mistake.explanation) {
+      if (yPosition > pageHeight - 40) { doc.addPage(); yPosition = 20 }
+      doc.setFont('helvetica', 'bold')
+      doc.text('Explanation:', margin, yPosition)
+      yPosition += lineHeight
+      doc.setFont('helvetica', 'normal')
+      const explainLines = doc.splitTextToSize(mistake.explanation, 170)
+      doc.text(explainLines, margin, yPosition)
+      yPosition += explainLines.length * lineHeight + 3
     }
     
     // Redo Attempts
@@ -360,20 +282,17 @@ const exportToPDF = async (mistakes, subject, module, darkMode) => {
       yPosition += lineHeight
       doc.setFont('helvetica', 'normal')
       
-      for (const attempt of mistake.redo_attempts) {
+      mistake.redo_attempts.forEach((attempt, index) => {
         if (yPosition > pageHeight - 30) { doc.addPage(); yPosition = 20 }
         const statusEmoji = attempt.status === 'success' ? '✓' : attempt.status === 'partial' ? '~' : '✗'
-        doc.text(`  ${statusEmoji} ${formatDate(attempt.attempt_date)}`, margin, yPosition)
+        doc.text(`  ${index + 1}. [${statusEmoji}] ${formatDate(attempt.attempt_date)}`, margin, yPosition)
         yPosition += lineHeight
         if (attempt.notes) {
           const attemptLines = doc.splitTextToSize(`     ${attempt.notes}`, 160)
           doc.text(attemptLines, margin, yPosition)
           yPosition += attemptLines.length * lineHeight
         }
-        if (attempt.image) {
-          yPosition = await addImageToPDF(attempt.image, 'Attempt Image')
-        }
-      }
+      })
       yPosition += 3
     }
     
@@ -756,9 +675,6 @@ export default function StudyNotesApp() {
   const [showAddModule, setShowAddModule] = useState(false)
   const [newModuleName, setNewModuleName] = useState('')
   const [newTipText, setNewTipText] = useState('')
-  const [editingModuleId, setEditingModuleId] = useState(null)
-  const [editingModuleName, setEditingModuleName] = useState('')
-  const [isReorderingModules, setIsReorderingModules] = useState(false)
   
   // Track unsaved notes for auto-save
   const [unsavedNotes, setUnsavedNotes] = useState({})
@@ -947,43 +863,6 @@ export default function StudyNotesApp() {
       setShowAddModule(false)
     } catch (err) {
       console.error('Failed to create module:', err)
-    }
-  }
-
-  const updateModule = async (id, updates) => {
-    try {
-      const updated = await db.updateModule(id, updates)
-      setModules(modules.map(m => m.id === id ? updated : m))
-      if (selectedModule?.id === id) {
-        setSelectedModule(updated)
-      }
-    } catch (err) {
-      console.error('Failed to update module:', err)
-    }
-  }
-
-  const handleRenameModule = async (id) => {
-    if (!editingModuleName.trim()) {
-      setEditingModuleId(null)
-      return
-    }
-    await updateModule(id, { name: editingModuleName })
-    setEditingModuleId(null)
-    setEditingModuleName('')
-  }
-
-  const handleReorderModules = async (newOrder) => {
-    setModules(prev => {
-      const otherModules = prev.filter(m => m.module_type !== selectedTab === 'mistakes' ? 'mistake' : 'tip' || m.name === 'General')
-      return [...otherModules, ...newOrder]
-    })
-    
-    for (let i = 0; i < newOrder.length; i++) {
-      try {
-        await db.updateModule(newOrder[i].id, { sort_order: i })
-      } catch (err) {
-        console.error('Failed to update module sort order:', err)
-      }
     }
   }
 
@@ -1299,21 +1178,35 @@ export default function StudyNotesApp() {
               </div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {subjects.map((subject) => (
-                  <motion.div
-                    key={subject.id}
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
-                    className={`p-6 rounded-2xl cursor-pointer transition-colors ${cardBg} border ${borderColor} hover:border-blue-500/50`}
-                    onClick={() => setSelectedSubject(subject)}
-                  >
-                    <div className="flex items-start justify-between">
-                      <div className="text-4xl mb-3">{subject.icon}</div>
-                    </div>
-                    <h3 className="text-xl font-semibold mb-2">{subject.name}</h3>
-                    <p className={`text-sm ${secondaryText}`}>Click to view modules and notes</p>
-                  </motion.div>
-                ))}
+                {subjects.map((subject) => {
+                  const subjectMistakes = mistakeNotes.filter(n => n.subject_id === subject.id).length
+                  const subjectTips = tips.filter(t => t.subject_id === subject.id).length
+
+                  return (
+                    <motion.div
+                      key={subject.id}
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                      className={`p-6 rounded-2xl cursor-pointer transition-colors ${cardBg} border ${borderColor} hover:border-blue-500/50`}
+                      onClick={() => setSelectedSubject(subject)}
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="text-4xl mb-3">{subject.icon}</div>
+                      </div>
+                      <h3 className="text-xl font-semibold mb-2">{subject.name}</h3>
+                      <div className={`flex items-center gap-4 text-sm ${secondaryText}`}>
+                        <span className="flex items-center gap-1">
+                          <AlertCircle size={14} />
+                          {subjectMistakes} mistakes
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <Lightbulb size={14} />
+                          {subjectTips} tips
+                        </span>
+                      </div>
+                    </motion.div>
+                  )
+                })}
               </div>
             )}
           </div>
@@ -1398,7 +1291,7 @@ export default function StudyNotesApp() {
                 </button>
               )}
 
-              {/* Reorder Notes Toggle */}
+              {/* Reorder Toggle */}
               <button
                 onClick={() => setIsReordering(!isReordering)}
                 className={`flex items-center gap-2 px-3 py-2 rounded-lg border transition-colors ${
@@ -1408,101 +1301,36 @@ export default function StudyNotesApp() {
                 }`}
               >
                 <GripVertical size={16} />
-                {isReordering ? 'Done Reordering Notes' : 'Reorder Notes'}
-              </button>
-
-              {/* Reorder Modules Toggle */}
-              <button
-                onClick={() => setIsReorderingModules(!isReorderingModules)}
-                className={`flex items-center gap-2 px-3 py-2 rounded-lg border transition-colors ${
-                  isReorderingModules
-                    ? 'border-orange-500 text-orange-500 bg-orange-500/10'
-                    : `${borderColor} ${secondaryText}`
-                }`}
-              >
-                <GripVertical size={16} />
-                {isReorderingModules ? 'Done Reordering Modules' : 'Reorder Modules'}
+                {isReordering ? 'Done Reordering' : 'Reorder'}
               </button>
             </div>
 
-            {/* Module Selector with Edit, Reorder, Delete */}
+            {/* Module Selector with Delete Button */}
             <div className="flex items-center gap-2 mb-6 flex-wrap">
-              {isReorderingModules ? (
-                <Reorder.Group 
-                  axis="x" 
-                  values={currentModules} 
-                  onReorder={handleReorderModules}
-                  className="flex items-center gap-2 flex-wrap"
-                >
-                  {currentModules.map((module) => (
-                    <Reorder.Item key={module.id} value={module} className="cursor-grab active:cursor-grabbing">
-                      <div className={`px-4 py-2 rounded-lg border ${borderColor} ${secondaryText} flex items-center gap-2`}>
-                        <GripVertical size={14} />
-                        {module.name}
-                      </div>
-                    </Reorder.Item>
-                  ))}
-                </Reorder.Group>
-              ) : (
-                currentModules.map((module) => (
-                  <div key={module.id} className="relative group">
-                    {editingModuleId === module.id ? (
-                      <div className="flex items-center gap-1">
-                        <input
-                          type="text"
-                          value={editingModuleName}
-                          onChange={(e) => setEditingModuleName(e.target.value)}
-                          onKeyPress={(e) => e.key === 'Enter' && handleRenameModule(module.id)}
-                          className={`px-2 py-1 text-sm rounded border ${
-                            darkMode
-                              ? 'bg-gray-800 border-gray-600 text-gray-100'
-                              : 'bg-white border-gray-300 text-gray-900'
-                          }`}
-                          autoFocus
-                          onBlur={() => handleRenameModule(module.id)}
-                        />
-                      </div>
-                    ) : (
-                      <button
-                        onClick={() => setSelectedModule(module)}
-                        className={`px-4 py-2 pr-16 rounded-lg border transition-colors ${
-                          selectedModule?.id === module.id
-                            ? 'border-blue-500 bg-blue-500/20 text-blue-400'
-                            : `${borderColor} ${secondaryText} hover:border-gray-500`
-                        }`}
-                      >
-                        {module.name}
-                      </button>
-                    )}
-                    {module.name !== 'General' && editingModuleId !== module.id && (
-                      <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button
-                          onClick={(e) => { 
-                            e.stopPropagation(); 
-                            setEditingModuleId(module.id);
-                            setEditingModuleName(module.name);
-                          }}
-                          className={`p-1 rounded ${
-                            darkMode ? 'hover:bg-blue-500/20 text-gray-400 hover:text-blue-400' : 'hover:bg-blue-50 text-gray-400 hover:text-blue-500'
-                          }`}
-                          title="Rename"
-                        >
-                          <Edit3 size={12} />
-                        </button>
-                        <button
-                          onClick={(e) => { e.stopPropagation(); deleteModule(module.id); }}
-                          className={`p-1 rounded ${
-                            darkMode ? 'hover:bg-red-500/20 text-gray-400 hover:text-red-400' : 'hover:bg-red-50 text-gray-400 hover:text-red-500'
-                          }`}
-                          title="Delete"
-                        >
-                          <X size={12} />
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                ))
-              )}
+              {currentModules.map((module) => (
+                <div key={module.id} className="relative group">
+                  <button
+                    onClick={() => setSelectedModule(module)}
+                    className={`px-4 py-2 pr-8 rounded-lg border transition-colors ${
+                      selectedModule?.id === module.id
+                        ? 'border-blue-500 bg-blue-500/20 text-blue-400'
+                        : `${borderColor} ${secondaryText} hover:border-gray-500`
+                    }`}
+                  >
+                    {module.name}
+                  </button>
+                  {module.name !== 'General' && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); deleteModule(module.id); }}
+                      className={`absolute right-1 top-1/2 -translate-y-1/2 p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity ${
+                        darkMode ? 'hover:bg-red-500/20 text-gray-400 hover:text-red-400' : 'hover:bg-red-50 text-gray-400 hover:text-red-500'
+                      }`}
+                    >
+                      <X size={14} />
+                    </button>
+                  )}
+                </div>
+              ))}
               
               {showAddModule ? (
                 <div className="flex items-center gap-2">
@@ -1735,6 +1563,9 @@ export default function StudyNotesApp() {
         {activeView === 'study' && (
           <StudyView
             subjects={subjects}
+            modules={modules}
+            mistakes={mistakeNotes}
+            tips={tips}
             darkMode={darkMode}
             cardBg={cardBg}
             borderColor={borderColor}
@@ -2666,54 +2497,15 @@ function ScheduleView({ darkMode, cardBg, borderColor, secondaryText, onStartFla
 }
 
 // Study View Component
-function StudyView({ subjects, darkMode, cardBg, borderColor, secondaryText, onStartStudy }) {
+function StudyView({ subjects, modules, mistakes, tips, darkMode, cardBg, borderColor, secondaryText, onStartStudy }) {
   const [studySelections, setStudySelections] = useState({})
   const [studyItemCount, setStudyItemCount] = useState(10)
-  const [allModules, setAllModules] = useState([])
-  const [allMistakes, setAllMistakes] = useState([])
-  const [allTips, setAllTips] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [excludedTypes, setExcludedTypes] = useState([])
-  const [mistakeTypes, setMistakeTypes] = useState([])
-
-  // Load all data on mount
-  useEffect(() => {
-    loadAllData()
-  }, [])
-
-  const loadAllData = async () => {
-    setLoading(true)
-    try {
-      const [modulesData, mistakesData, tipsData, typesData] = await Promise.all([
-        db.getModules(),
-        db.getMistakeNotes(),
-        db.getTips(),
-        db.getMistakeTypes()
-      ])
-      setAllModules(modulesData || [])
-      setAllMistakes(mistakesData || [])
-      setAllTips(tipsData || [])
-      setMistakeTypes(typesData || [])
-    } catch (err) {
-      console.error('Failed to load study data:', err)
-    } finally {
-      setLoading(false)
-    }
-  }
 
   const toggleSelection = (subjectId, moduleId) => {
     setStudySelections(prev => ({
       ...prev,
       [`${subjectId}-${moduleId}`]: !prev[`${subjectId}-${moduleId}`]
     }))
-  }
-
-  const toggleExcludeType = (typeName) => {
-    setExcludedTypes(prev => 
-      prev.includes(typeName) 
-        ? prev.filter(t => t !== typeName)
-        : [...prev, typeName]
-    )
   }
 
   const startStudy = () => {
@@ -2723,16 +2515,10 @@ function StudyView({ subjects, darkMode, cardBg, borderColor, secondaryText, onS
       if (isSelected) {
         const [subjectId, moduleId] = key.split('-')
         
-        // Filter mistakes by excluded types
-        const moduleMistakes = allMistakes.filter(m => {
-          if (m.module_id !== moduleId) return false
-          // Check if any of the mistake's types are in excluded list
-          const mistakeTypeNames = m.mistake_types || []
-          return !mistakeTypeNames.some(type => excludedTypes.includes(type))
-        })
+        const moduleMistakes = mistakes.filter(m => m.module_id === moduleId)
         moduleMistakes.forEach(m => items.push({ ...m, type: 'mistake' }))
         
-        const moduleTips = allTips.filter(t => t.module_id === moduleId)
+        const moduleTips = tips.filter(t => t.module_id === moduleId)
         moduleTips.forEach(t => items.push({ ...t, type: 'tip' }))
       }
     })
@@ -2747,41 +2533,10 @@ function StudyView({ subjects, darkMode, cardBg, borderColor, secondaryText, onS
     }
   }
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-16">
-        <Loader2 className="animate-spin text-blue-500" size={32} />
-      </div>
-    )
-  }
-
   return (
     <div>
       <h1 className="text-2xl font-bold mb-2">Study Mode</h1>
       <p className={`${secondaryText} mb-6`}>Select subjects and modules to review</p>
-
-      {/* Mistake Type Filter */}
-      {mistakeTypes.length > 0 && (
-        <div className={`p-4 rounded-xl ${cardBg} border ${borderColor} mb-6`}>
-          <h3 className="font-semibold mb-3">Exclude Mistake Types</h3>
-          <p className={`text-sm ${secondaryText} mb-3`}>Selected types will be filtered out</p>
-          <div className="flex flex-wrap gap-2">
-            {mistakeTypes.map((type) => (
-              <button
-                key={type.id}
-                onClick={() => toggleExcludeType(type.name)}
-                className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${
-                  excludedTypes.includes(type.name)
-                    ? 'border-red-500 bg-red-500/20 text-red-400 line-through'
-                    : `${borderColor} ${secondaryText} hover:border-gray-500`
-                }`}
-              >
-                {type.name}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className={`p-6 rounded-2xl ${cardBg} border ${borderColor}`}>
@@ -2789,7 +2544,7 @@ function StudyView({ subjects, darkMode, cardBg, borderColor, secondaryText, onS
           
           <div className="space-y-4">
             {subjects.map((subject) => {
-              const subjectModules = allModules.filter(m => m.subject_id === subject.id)
+              const subjectModules = modules.filter(m => m.subject_id === subject.id)
               
               return (
                 <div key={subject.id}>
@@ -2800,13 +2555,8 @@ function StudyView({ subjects, darkMode, cardBg, borderColor, secondaryText, onS
                   <div className="flex flex-wrap gap-2 pl-6">
                     {subjectModules.map((module) => {
                       const isSelected = studySelections[`${subject.id}-${module.id}`]
-                      const moduleMistakeCount = allMistakes.filter(m => {
-                        if (m.module_id !== module.id) return false
-                        const mistakeTypeNames = m.mistake_types || []
-                        return !mistakeTypeNames.some(type => excludedTypes.includes(type))
-                      }).length
-                      const moduleTipCount = allTips.filter(t => t.module_id === module.id).length
-                      const moduleItems = moduleMistakeCount + moduleTipCount
+                      const moduleItems = mistakes.filter(m => m.module_id === module.id).length +
+                                         tips.filter(t => t.module_id === module.id).length
 
                       return (
                         <button
