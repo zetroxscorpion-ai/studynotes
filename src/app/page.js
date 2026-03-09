@@ -1055,52 +1055,58 @@ export default function StudyNotesApp() {
     }
   }
 
-  // Reorder mistakes
-  const handleReorderMistakes = async (newOrder) => {
-    // Update local state first (immediate feedback)
+  // Reorder mistakes - only update local state, save on toggle off
+  const handleReorderMistakes = (newOrder) => {
+    // Just update local state for immediate visual feedback
     setMistakeNotes(prev => {
       const otherNotes = prev.filter(n => n.module_id !== selectedModule?.id)
       return [...otherNotes, ...newOrder]
     })
+  }
+  
+  // Save reordering when user clicks "Done Reordering"
+  const saveMistakeOrder = async () => {
+    const moduleNotes = mistakeNotes.filter(n => n.module_id === selectedModule?.id)
     
-    // Update sort_order in database sequentially to avoid rate limits
-    for (let i = 0; i < newOrder.length; i++) {
-      const note = newOrder[i]
-      // Only update if sort_order changed
-      if (note.sort_order !== i) {
-        try {
-          await supabase
-            .from('mistake_notes')
-            .update({ sort_order: i })
-            .eq('id', note.id)
-        } catch (err) {
-          console.error(`Failed to update sort_order for note ${note.id}:`, err)
-        }
+    // Batch update all at once using RPC or individual updates with delay
+    for (let i = 0; i < moduleNotes.length; i++) {
+      const note = moduleNotes[i]
+      try {
+        await supabase
+          .from('mistake_notes')
+          .update({ sort_order: i })
+          .eq('id', note.id)
+        // Small delay to avoid overwhelming the browser
+        await new Promise(resolve => setTimeout(resolve, 50))
+      } catch (err) {
+        console.error(`Failed to update sort_order for note ${note.id}:`, err)
       }
     }
   }
 
-  // Reorder tips
-  const handleReorderTips = async (newOrder) => {
-    // Update local state first (immediate feedback)
+  // Reorder tips - only update local state, save on toggle off
+  const handleReorderTips = (newOrder) => {
+    // Just update local state for immediate visual feedback
     setTips(prev => {
       const otherTips = prev.filter(t => t.module_id !== selectedModule?.id)
       return [...otherTips, ...newOrder]
     })
+  }
+  
+  // Save reordering when user clicks "Done Reordering"
+  const saveTipOrder = async () => {
+    const moduleTips = tips.filter(t => t.module_id === selectedModule?.id)
     
-    // Update sort_order in database sequentially to avoid rate limits
-    for (let i = 0; i < newOrder.length; i++) {
-      const tip = newOrder[i]
-      // Only update if sort_order changed
-      if (tip.sort_order !== i) {
-        try {
-          await supabase
-            .from('tips')
-            .update({ sort_order: i })
-            .eq('id', tip.id)
-        } catch (err) {
-          console.error(`Failed to update sort_order for tip ${tip.id}:`, err)
-        }
+    for (let i = 0; i < moduleTips.length; i++) {
+      const tip = moduleTips[i]
+      try {
+        await supabase
+          .from('tips')
+          .update({ sort_order: i })
+          .eq('id', tip.id)
+        await new Promise(resolve => setTimeout(resolve, 50))
+      } catch (err) {
+        console.error(`Failed to update sort_order for tip ${tip.id}:`, err)
       }
     }
   }
@@ -1420,7 +1426,13 @@ export default function StudyNotesApp() {
 
               {/* Reorder Notes Toggle */}
               <button
-                onClick={() => setIsReordering(!isReordering)}
+                onClick={() => {
+                  if (isReordering) {
+                    // Save order when turning off reordering
+                    saveMistakeOrder()
+                  }
+                  setIsReordering(!isReordering)
+                }}
                 className={`flex items-center gap-2 px-3 py-2 rounded-lg border transition-colors ${
                   isReordering
                     ? 'border-purple-500 text-purple-500 bg-purple-500/10'
