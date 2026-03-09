@@ -79,16 +79,18 @@ export async function deleteSubject(id) {
   if (error) throw error
 }
 
-// Modules - TEMPORARY DEBUG VERSION
-export async function getModules() {
-  const { data, error } = await supabase
+// Modules
+export async function getModules(subjectId = null) {
+  let query = supabase
     .from('modules')
-    .select('*, subjects(name, color)')
-    .order('name')
+    .select('*')
+    .order('sort_order', { ascending: true })
   
-  console.log('Modules data:', data)
-  console.log('Modules error:', error)
+  if (subjectId) {
+    query = query.eq('subject_id', subjectId)
+  }
   
+  const { data, error } = await query
   if (error) throw error
   return data || []
 }
@@ -349,6 +351,27 @@ export async function updateUserSettings(settings) {
     .single()
   if (error) throw error
   return data
+}
+
+// Get scheduled mistakes for redo
+export async function getScheduledMistakes() {
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return []
+  
+  const today = new Date().toISOString().split('T')[0]
+  const { data, error } = await supabase
+    .from('mistake_notes')
+    .select(`
+      *,
+      subjects(name, icon),
+      modules(name)
+    `)
+    .eq('user_id', user.id)
+    .not('scheduled_redo', 'is', null)
+    .lte('scheduled_redo', today + 'T23:59:59')
+    .order('scheduled_redo', { ascending: true })
+  if (error) throw error
+  return data || []
 }
 
 // Legacy aliases for backwards compatibility
