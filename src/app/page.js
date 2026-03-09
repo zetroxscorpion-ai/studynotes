@@ -785,7 +785,12 @@ export default function StudyNotesApp() {
   // Check auth on mount
   useEffect(() => {
     const checkAuth = async () => {
-      const { data: { session } } = await supabase.auth.getSession()
+      console.log('Checking auth...')
+      const { data: { session }, error } = await supabase.auth.getSession()
+      if (error) {
+        console.error('Auth error:', error)
+      }
+      console.log('Session:', session ? 'found' : 'not found')
       setUser(session?.user || null)
       setAuthLoading(false)
     }
@@ -793,6 +798,7 @@ export default function StudyNotesApp() {
     checkAuth()
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      console.log('Auth state changed:', _event)
       setUser(session?.user || null)
     })
 
@@ -801,6 +807,7 @@ export default function StudyNotesApp() {
 
   // Load data when user logs in
   useEffect(() => {
+    console.log('User changed:', user ? user.email : 'null')
     if (user) {
       loadInitialData()
     }
@@ -843,6 +850,7 @@ export default function StudyNotesApp() {
   }, [unsavedNotes])
 
   const loadInitialData = async () => {
+    console.log('Loading initial data...')
     setLoading(true)
     try {
       const [subjectsData, mistakeTypesData, settingsData] = await Promise.all([
@@ -851,6 +859,7 @@ export default function StudyNotesApp() {
         db.getUserSettings()
       ])
       
+      console.log('Subjects loaded:', subjectsData?.length || 0)
       setSubjects(subjectsData || [])
       setMistakeTypes(mistakeTypesData || [])
       if (settingsData) {
