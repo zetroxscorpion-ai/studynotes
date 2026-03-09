@@ -973,11 +973,15 @@ export default function StudyNotesApp() {
   }
 
   const handleReorderModules = async (newOrder) => {
+    const currentType = selectedTab === 'mistakes' ? 'mistake' : 'tip'
+    
+    // Update local state - keep other module types and General modules, replace reordered ones
     setModules(prev => {
-      const otherModules = prev.filter(m => m.module_type !== selectedTab === 'mistakes' ? 'mistake' : 'tip' || m.name === 'General')
+      const otherModules = prev.filter(m => m.module_type !== currentType || m.name === 'General')
       return [...otherModules, ...newOrder]
     })
     
+    // Save sort order to database
     for (let i = 0; i < newOrder.length; i++) {
       try {
         await db.updateModule(newOrder[i].id, { sort_order: i })
