@@ -1,56 +1,17 @@
 import { supabase } from './supabase'
 
-// Auth functions
-export async function getCurrentUser() {
-  const { data: { user }, error } = await supabase.auth.getUser()
-  if (error) throw error
-  return user
-}
-
-export async function signUp(email, password, name) {
-  const { data, error } = await supabase.auth.signUp({
-    email,
-    password,
-    options: {
-      data: { name }
-    }
-  })
-  if (error) throw error
-  return data
-}
-
-export async function signIn(email, password) {
-  const { data, error } = await supabase.auth.signInWithPassword({
-    email,
-    password
-  })
-  if (error) throw error
-  return data
-}
-
-export async function signOut() {
-  const { error } = await supabase.auth.signOut()
-  if (error) throw error
-}
-
 // Subjects
 export async function getSubjects() {
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return []
-  
   const { data, error } = await supabase
     .from('subjects')
     .select('*')
-    .eq('user_id', user.id)
-    .order('name')
+    .order('sort_order')
   if (error) throw error
   return data || []
 }
 
 export async function createSubject(subject) {
   const { data: { user } } = await supabase.auth.getUser()
-  if (!user) throw new Error('Not authenticated')
-  
   const { data, error } = await supabase
     .from('subjects')
     .insert({ ...subject, user_id: user.id })
@@ -72,10 +33,7 @@ export async function updateSubject(id, updates) {
 }
 
 export async function deleteSubject(id) {
-  const { error } = await supabase
-    .from('subjects')
-    .delete()
-    .eq('id', id)
+  const { error } = await supabase.from('subjects').delete().eq('id', id)
   if (error) throw error
 }
 
@@ -174,20 +132,19 @@ export async function deleteMistakeType(id) {
 }
 
 // Mistake Notes
-export async function getMistakeNotes() {
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return []
-  
-  const { data, error } = await supabase
+export async function getMistakeNotes(moduleId = null, subjectId = null) {
+  let query = supabase
     .from('mistake_notes')
     .select(`
       *,
-      subjects(name, color),
-      modules(name),
-      mistake_types(name, color)
+      redo_attempts (*)
     `)
-    .eq('user_id', user.id)
-    .order('created_at', { ascending: false })
+    .order('sort_order', { ascending: true })
+  
+  if (moduleId) query = query.eq('module_id', moduleId)
+  if (subjectId) query = query.eq('subject_id', subjectId)
+  
+  const { data, error } = await query
   if (error) throw error
   return data || []
 }
@@ -197,9 +154,7 @@ export async function getMistakeNote(id) {
     .from('mistake_notes')
     .select(`
       *,
-      subjects(name, color),
-      modules(name),
-      mistake_types(name, color)
+      redo_attempts (*)
     `)
     .eq('id', id)
     .single()
@@ -240,16 +195,6 @@ export async function deleteMistakeNote(id) {
 }
 
 // Redo Attempts
-export async function getRedoAttempts(mistakeNoteId) {
-  const { data, error } = await supabase
-    .from('redo_attempts')
-    .select('*')
-    .eq('mistake_note_id', mistakeNoteId)
-    .order('attempted_at', { ascending: false })
-  if (error) throw error
-  return data || []
-}
-
 export async function createRedoAttempt(attempt) {
   const { data, error } = await supabase
     .from('redo_attempts')
@@ -280,15 +225,12 @@ export async function deleteRedoAttempt(id) {
 }
 
 // Tips
-export async function getTips() {
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return []
+export async function getTips(moduleId = null, subjectId = null) {
+  let query = supabase.from('tips').select('*').order('sort_order')
+  if (moduleId) query = query.eq('module_id', moduleId)
+  if (subjectId) query = query.eq('subject_id', subjectId)
   
-  const { data, error } = await supabase
-    .from('tips')
-    .select('*, subjects(name, color), modules(name)')
-    .eq('user_id', user.id)
-    .order('created_at', { ascending: false })
+  const { data, error } = await query
   if (error) throw error
   return data || []
 }
