@@ -1057,35 +1057,45 @@ export default function StudyNotesApp() {
 
   // Reorder mistakes
   const handleReorderMistakes = async (newOrder) => {
+    // Update local state first
     setMistakeNotes(prev => {
       const otherNotes = prev.filter(n => n.module_id !== selectedModule?.id)
       return [...otherNotes, ...newOrder]
     })
     
-    // Update sort_order in database
-    for (let i = 0; i < newOrder.length; i++) {
-      try {
-        await db.updateMistakeNote(newOrder[i].id, { sort_order: i })
-      } catch (err) {
-        console.error('Failed to update sort order:', err)
-      }
+    // Update sort_order in database (only sort_order, not full note)
+    try {
+      await Promise.all(
+        newOrder.map((note, index) => 
+          supabase.from('mistake_notes')
+            .update({ sort_order: index })
+            .eq('id', note.id)
+        )
+      )
+    } catch (err) {
+      console.error('Failed to update sort order:', err)
     }
   }
 
   // Reorder tips
   const handleReorderTips = async (newOrder) => {
+    // Update local state first
     setTips(prev => {
       const otherTips = prev.filter(t => t.module_id !== selectedModule?.id)
       return [...otherTips, ...newOrder]
     })
     
-    // Update sort_order in database
-    for (let i = 0; i < newOrder.length; i++) {
-      try {
-        await db.updateTip(newOrder[i].id, { sort_order: i })
-      } catch (err) {
-        console.error('Failed to update sort order:', err)
-      }
+    // Update sort_order in database (only sort_order, not full tip)
+    try {
+      await Promise.all(
+        newOrder.map((tip, index) => 
+          supabase.from('tips')
+            .update({ sort_order: index })
+            .eq('id', tip.id)
+        )
+      )
+    } catch (err) {
+      console.error('Failed to update sort order:', err)
     }
   }
 
