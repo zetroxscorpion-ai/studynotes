@@ -756,6 +756,7 @@ export default function StudyNotesApp() {
   const [showAddModule, setShowAddModule] = useState(false)
   const [newModuleName, setNewModuleName] = useState('')
   const [newTipText, setNewTipText] = useState('')
+  const [newTipImage, setNewTipImage] = useState(null)
   const [editingModuleId, setEditingModuleId] = useState(null)
   const [editingModuleName, setEditingModuleName] = useState('')
   const [isReorderingModules, setIsReorderingModules] = useState(false)
@@ -1137,10 +1138,12 @@ export default function StudyNotesApp() {
         subject_id: selectedSubject.id,
         module_id: selectedModule.id,
         text: newTipText,
+        image: newTipImage,
         sort_order: tips.filter(t => t.module_id === selectedModule.id).length
       })
       setTips([...tips, newTip])
       setNewTipText('')
+      setNewTipImage(null)
     } catch (err) {
       console.error('Failed to create tip:', err)
     }
@@ -1728,8 +1731,34 @@ export default function StudyNotesApp() {
                             ? 'bg-gray-700 border-gray-600 text-gray-100'
                             : 'bg-gray-50 border-gray-200 text-gray-900'
                         }`}
-                        rows={2}
+                        rows={3}
                       />
+                      
+                      {/* Image Upload */}
+                      <div className="mt-2">
+                        {newTipImage ? (
+                          <div className="relative inline-block">
+                            <img 
+                              src={newTipImage} 
+                              alt="Preview" 
+                              className="max-h-32 rounded-lg"
+                            />
+                            <button
+                              onClick={() => setNewTipImage(null)}
+                              className="absolute -top-2 -right-2 p-1 bg-red-500 text-white rounded-full hover:bg-red-600"
+                            >
+                              <X size={12} />
+                            </button>
+                          </div>
+                        ) : (
+                          <ImageUpload
+                            value={newTipImage}
+                            onChange={setNewTipImage}
+                            darkMode={darkMode}
+                          />
+                        )}
+                      </div>
+                      
                       <div className="flex justify-end mt-2">
                         <button
                           onClick={addTip}
@@ -2571,10 +2600,18 @@ function TipCard({ tip, darkMode, onUpdate, onDelete, isReordering }) {
         </div>
       ) : (
         <>
-          <div className="flex-1 flex items-start gap-2">
-            <p className={`flex-1 ${darkMode ? 'text-gray-200' : 'text-gray-800'}`}>{tip.text}</p>
-            {tip.is_important && <Star size={14} className="text-amber-500 fill-amber-500 flex-shrink-0 mt-1" />}
+          <div className="flex-1">
+            <p className={`${darkMode ? 'text-gray-200' : 'text-gray-800'} whitespace-pre-wrap`}>{tip.text}</p>
+            {tip.image && (
+              <img 
+                src={tip.image} 
+                alt="Tip image" 
+                className="mt-2 max-w-full max-h-48 rounded-lg object-contain"
+              />
+            )}
           </div>
+          <div className="flex items-start gap-1 flex-shrink-0">
+            {tip.is_important && <Star size={14} className="text-amber-500 fill-amber-500 mt-1" />}
           {!isReordering && (
             <div className="flex items-center gap-1 flex-shrink-0">
               <button
