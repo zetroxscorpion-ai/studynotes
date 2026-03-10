@@ -2610,10 +2610,9 @@ function TipCard({ tip, darkMode, onUpdate, onDelete, isReordering }) {
               />
             )}
           </div>
-          <div className="flex items-start gap-1 flex-shrink-0">
-            {tip.is_important && <Star size={14} className="text-amber-500 fill-amber-500 mt-1" />}
           {!isReordering && (
             <div className="flex items-center gap-1 flex-shrink-0">
+              {tip.is_important && <Star size={14} className="text-amber-500 fill-amber-500 mt-1" />}
               <button
                 onClick={toggleImportant}
                 className={`p-1.5 rounded-lg transition-colors ${
